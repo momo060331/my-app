@@ -1175,13 +1175,26 @@ canvas.addEventListener('touchstart', e => {
 
 canvas.addEventListener('touchmove', e => {
     e.preventDefault();
-    const touch = e.touches[0];
-    const mouseEvent = new MouseEvent('mousemove', {
-        clientX: touch.clientX,
-        clientY: touch.clientY,
-        bubbles: true
-    });
-    canvas.dispatchEvent(mouseEvent);
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        
+        // パン中の場合は直接パン処理を実行
+        if (state.isPanning) {
+            const dx = touch.clientX - state.dragStart.x;
+            const dy = touch.clientY - state.dragStart.y;
+            state.panOffset.x += dx;
+            state.panOffset.y += dy;
+            state.dragStart = { x: touch.clientX, y: touch.clientY };
+            draw();
+        } else {
+            const mouseEvent = new MouseEvent('mousemove', {
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                bubbles: true
+            });
+            canvas.dispatchEvent(mouseEvent);
+        }
+    }
 }, { passive: false });
 
 canvas.addEventListener('touchend', e => {
