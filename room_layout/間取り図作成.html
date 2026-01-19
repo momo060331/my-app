@@ -620,17 +620,11 @@ function findItemAt(x, y) {
         }
     }
 
-    if (state.selectedTool === 'select') {
-        for (let w of state.walls) {
-            if (Math.abs(x - w.x1) < 10 / state.zoomLevel && Math.abs(y - w.y1) < 10 / state.zoomLevel)
-                return { type: 'wall-endpoint', wall: w, endpoint: 1 };
-            if (Math.abs(x - w.x2) < 10 / state.zoomLevel && Math.abs(y - w.y2) < 10 / state.zoomLevel)
-                return { type: 'wall-endpoint', wall: w, endpoint: 2 };
-            const mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2;
-            if (Math.abs(x - mx) < 10 / state.zoomLevel && Math.abs(y - my) < 10 / state.zoomLevel)
-                return { type: 'wall-rotate', wall: w };
-        }
-        for (let r of state.rooms) {
+if (state.selectedTool === 'select') {
+    // 選択中の部屋の頂点のみリサイズ可能にする
+    if (state.selectedItem && state.selectedItem.type === 'room') {
+        const r = state.rooms.find(rm => rm.id === state.selectedItem.id);
+        if (r) {
             for (let i = 0; i < r.vertices.length; i++) {
                 const v = r.vertices[i];
                 if (Math.abs(x - v.x) < 10 / state.zoomLevel && Math.abs(y - v.y) < 10 / state.zoomLevel)
@@ -638,6 +632,17 @@ function findItemAt(x, y) {
             }
         }
     }
+    
+    for (let w of state.walls) {
+        if (Math.abs(x - w.x1) < 10 / state.zoomLevel && Math.abs(y - w.y1) < 10 / state.zoomLevel)
+            return { type: 'wall-endpoint', wall: w, endpoint: 1 };
+        if (Math.abs(x - w.x2) < 10 / state.zoomLevel && Math.abs(y - w.y2) < 10 / state.zoomLevel)
+            return { type: 'wall-endpoint', wall: w, endpoint: 2 };
+        const mx = (w.x1 + w.x2) / 2, my = (w.y1 + w.y2) / 2;
+        if (Math.abs(x - mx) < 10 / state.zoomLevel && Math.abs(y - my) < 10 / state.zoomLevel)
+            return { type: 'wall-rotate', wall: w };
+    }
+}
 
     for (let w of [...state.walls].reverse()) {
         if (distanceToSegment(x, y, w.x1, w.y1, w.x2, w.y2) < (w.thickness / 2 + 5) / state.zoomLevel)
