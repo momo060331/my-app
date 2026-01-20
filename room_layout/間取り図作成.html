@@ -30,6 +30,9 @@
         .btn-group button { flex: 1; margin-bottom: 8px; }
         .color-picker { height: 40px; cursor: pointer; }
         .hint { background: #fff3cd; padding: 8px; border-radius: 4px; font-size: 11px; color: #856404; margin-top: 8px; }
+        .total-area-display button {
+            background: #4caf50 !important;
+        }
         /* モバイル対応 */
         @media (max-width: 768px) {
             body { flex-direction: column; }
@@ -40,7 +43,17 @@
                 padding: 10px;
             }
             h1 { font-size: 16px; margin-bottom: 10px; }
-            .total-area-display { font-size: 14px; padding: 8px; margin-bottom: 10px; }
+            .total-area-display { 
+                font-size: 11px !important; 
+                padding: 6px !important; 
+                margin-bottom: 10px; 
+            }
+            .total-area-display button {
+                font-size: 11px !important;
+                padding: 4px 6px !important;
+                min-width: 28px !important;
+                background: #4caf50 !important;
+            }
             .section { margin-bottom: 10px; }
             .section-title { font-size: 12px; }
             button { padding: 8px; font-size: 12px; margin-bottom: 4px; }
@@ -59,7 +72,11 @@
 <body>
     <div id="sidebar">
         <h1>🏠 間取り図作成</h1>
-        <div class="total-area-display">総面積: <span id="totalAreaTop">0.0</span> 畳</div>
+        <div class="total-area-display" style="display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: nowrap;">
+            <button class="info-btn" id="undoBtn" disabled style="padding: 6px 10px; margin: 0; font-size: 14px; min-width: 36px;">⏮️</button>
+            <span style="white-space: nowrap;">総面積: <span id="totalAreaTop">0.0</span> 畳</span>
+            <button class="info-btn" id="redoBtn" disabled style="padding: 6px 10px; margin: 0; font-size: 14px; min-width: 36px;">⏭️</button>
+        </div>
         
         <div class="section">
             <div class="section-title">ツール選択</div>
@@ -149,7 +166,9 @@ const ctx = canvas.getContext('2d');
 
 let state = {
     rooms: [], walls: [], doors: [], windows: [], manikins: [],
-    landBoundary: null,  // 敷地範囲
+    history: [],        // 履歴
+    historyIndex: -1,   // 履歴の現在位置
+    landBoundary: null, // 敷地範囲
     selectedTool: 'select', selectedItem: null, selectedVertex: null, selectedEdge: null,
     isDragging: false, dragStart: null, dragOffset: null,
     wallThickness: 15, gridSize: 45, showGrid: true, scale: 50, zoomLevel: 1.5,
@@ -197,6 +216,81 @@ function findNearestEdge(x, y, threshold = 20) {
     });
     
     return nearest;
+}
+
+// 履歴に状態を保存
+function saveHistory() {
+    // やり直し用の履歴をクリア
+    state.history = state.history.slice(0, state.historyIndex + 1);
+    const snapshot = {
+        rooms: JSON.parse(JSON.stringify(state.rooms)),
+        walls: JSON.parse(JSON.stringify(state.walls)),
+        doors: JSON.parse(JSON.stringify(state.doors)),
+        windows: JSON.parse(JSON.stringify(state.windows)),
+        manikins: JSON.parse(JSON.stringify(state.manikins)),
+        landBoundary: state.landBoundary ? JSON.parse(JSON.stringify(state.landBoundary)) : null
+    };
+    state.history.push(snapshot);
+    state.historyIndex++;
+    if (state.history.length > 20) {
+        state.history.shift();
+        state.historyIndex--;
+    }
+    updateUndoRedoButtons();
+}
+
+function undo() {
+    if (state.historyIndex > 0) {
+        state.historyIndex--;
+        const snapshot = state.history[state.historyIndex];
+        state.rooms = JSON.parse(JSON.stringify(snapshot.rooms));
+        state.walls = JSON.parse(JSON.stringify(snapshot.walls));
+        state.doors = JSON.parse(JSON.stringify(snapshot.doors));
+        state.windows = JSON.parse(JSON.stringify(snapshot.windows));
+        state.manikins = JSON.parse(JSON.stringify(snapshot.manikins));
+        state.landBoundary = snapshot.landBoundary ? JSON.parse(JSON.stringify(snapshot.landBoundary)) : null;
+        state.selectedItem = null;
+        state.selectedVertex = null;
+        state.selectedEdge = null;
+        updateUndoRedoButtons();
+        draw();
+    }
+}
+
+function redo() {
+    if (state.historyIndex < state.history.length - 1) {
+        state.historyIndex++;
+        const snapshot = state.history[state.historyIndex];
+        state.rooms = JSON.parse(JSON.stringify(snapshot.rooms));
+        state.walls = JSON.parse(JSON.stringify(snapshot.walls));
+        state.doors = JSON.parse(JSON.stringify(snapshot.doors));
+        state.windows = JSON.parse(JSON.stringify(snapshot.windows));
+        state.manikins = JSON.parse(JSON.stringify(snapshot.manikins));
+        state.landBoundary = snapshot.landBoundary ? JSON.parse(JSON.stringify(snapshot.landBoundary)) : null;
+        state.selectedItem = null;
+        state.selectedVertex = null;
+        state.selectedEdge = null;
+        updateUndoRedoButtons();
+        draw();
+    }
+}
+
+function updateUndoRedoButtons() {
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+    
+    undoBtn.disabled = state.historyIndex <= 0;
+    undoBtn.style.opacity = state.historyIndex <= 0 ? '0.5' : '1';
+    
+    redoBtn.disabled = state.historyIndex >= state.history.length - 1;
+    redoBtn.style.opacity = state.historyIndex >= state.history.length - 1 ? '0.5' : '1';
+}
+
+function switchToSelectTool() {
+    state.selectedTool = 'select';
+    document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => btn.classList.remove('active'));
+    document.querySelector('.tool-btn[data-tool="select"]').classList.add('active');
+    canvas.style.cursor = 'default';
 }
 
 function snapToGrid(v) { const g = state.gridSize * 0.2; return Math.round(v / g) * g; }
@@ -716,6 +810,7 @@ canvas.addEventListener('mousedown', e => {
                 });
                 state.wallStartVertex = null;
                 state.tempWallEndPos = null;
+                saveHistory();
                 draw();
             }
             return;
@@ -736,6 +831,8 @@ canvas.addEventListener('mousedown', e => {
         if (r) {
             r.vertices.splice(f.edgeIndex + 1, 0, snapPointToGrid({ x, y }));
             state.selectedItem = r;
+            saveHistory();
+            switchToSelectTool();
             draw();
         }
         return;
@@ -807,9 +904,8 @@ canvas.addEventListener('mousedown', e => {
             };
             state.rooms.push(newRoom);
             state.selectedItem = newRoom;
-            state.selectedTool = 'select';
-            document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => btn.classList.remove('active'));
-            document.querySelector('.tool-btn[data-tool="select"]').classList.add('active');
+            saveHistory();
+            switchToSelectTool();            
         } else if (state.selectedTool === 'door-swing' || state.selectedTool === 'door-sliding') {
             const edge = findNearestEdge(x, y, 30);
             if (edge) {
@@ -823,6 +919,7 @@ canvas.addEventListener('mousedown', e => {
                     width: 80,  // 80cm
                     rotation: edge.angle
                 });
+                saveHistory();
             }
         } else if (state.selectedTool === 'window') {
             const edge = findNearestEdge(x, y, 30);
@@ -836,9 +933,11 @@ canvas.addEventListener('mousedown', e => {
                     width: 90,  // 90cm
                     rotation: edge.angle
                 });
+                saveHistory();
             }
         } else if (state.selectedTool === 'manikin') {
             state.manikins.push({ id: Date.now(), type: 'manikin', x: sx, y: sy, rotation: 0 });
+            saveHistory();
         }
         draw();
     } else if (state.selectedTool === 'select') {
@@ -1011,6 +1110,9 @@ canvas.addEventListener('mousemove', e => {
 });
 
 canvas.addEventListener('mouseup', () => {
+    if (state.isDragging) {
+        saveHistory();
+    }
     state.isDragging = false;
     state.isRotating = false;
     state.isPanning = false;
@@ -1065,6 +1167,7 @@ document.getElementById('rotateBtn').addEventListener('click', () => {
     } else if (state.selectedItem.rotation !== undefined) {
         state.selectedItem.rotation = (state.selectedItem.rotation + 90) % 360;
     }
+    saveHistory();
     draw();
 });
 
@@ -1078,6 +1181,7 @@ document.getElementById('deleteBtn').addEventListener('click', () => {
     state.selectedItem = null;
     state.selectedVertex = null;
     state.selectedEdge = null;
+    saveHistory();
     draw();
 });
 
@@ -1133,12 +1237,14 @@ document.getElementById('setLandBtn').addEventListener('click', () => {
             width: width * state.scale,
             height: depth * state.scale
         };
+        saveHistory();
         draw();
     }
 });
 
 document.getElementById('clearLandBtn').addEventListener('click', () => {
     state.landBoundary = null;
+    saveHistory();
     draw();
 });
 
@@ -1146,6 +1252,7 @@ document.getElementById('clearBtn').addEventListener('click', () => {
     if (confirm('すべて削除しますか?')) {
         state.rooms = []; state.walls = []; state.doors = []; state.windows = []; state.manikins = [];
         state.selectedItem = null; state.selectedVertex = null; state.selectedEdge = null;
+        saveHistory();
         draw();
     }
 });
@@ -1244,11 +1351,24 @@ canvas.addEventListener('touchmove', e => {
     }
 }, { passive: false });
 
+// 元に戻す・やり直しボタン
+document.getElementById('undoBtn').addEventListener('click', undo);
+document.getElementById('redoBtn').addEventListener('click', redo);
+
 document.addEventListener('keydown', e => {
     if (e.key === 'Delete' && state.selectedItem) document.getElementById('deleteBtn').click();
     else if (e.key === 'r' && state.selectedItem) document.getElementById('rotateBtn').click();
+    else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+    }
 });
 
+// 初期履歴を保存
+saveHistory();
 draw();
     </script>
 </body>
