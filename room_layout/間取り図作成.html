@@ -80,7 +80,10 @@
         
         <div class="section">
             <div class="section-title">ツール選択</div>
-            <button class="tool-btn active" data-tool="select">✋ 選択・移動</button>
+            <div class="btn-group">
+                <button class="tool-btn active" data-tool="select">✋ 選択</button>
+                <button class="tool-btn" data-tool="delete">🗑️ 削除</button>
+            </div>
             <button class="tool-btn" data-tool="room">🏠 部屋追加</button>
             <div class="btn-group">
                 <button class="tool-btn" data-tool="edit-vertex">📍 編集</button>
@@ -93,8 +96,11 @@
                 <button class="tool-btn" data-tool="door-sliding">🚪引</button>
                 <button class="tool-btn" data-tool="window">🪟窓</button>
             </div>
-            <button class="tool-btn" data-tool="manikin">🚶 人型</button>
-            <div class="hint">💡 壁追加: 頂点2つクリック<br>💡 辺移動: 法線方向のみ<br>💡 パン: 右クリック or Ctrl+クリック</div>
+            <div class="btn-group">
+                <button class="tool-btn" data-tool="manikin">🚶 人型</button>
+                <button class="tool-btn" data-tool="dimension">📏 寸法</button>
+            </div>
+            <div class="hint">💡 削除: 連続クリックで削除<br>💡 壁追加: 頂点2つクリック<br>💡 パン: 右クリック or Ctrl+クリック</div>
         </div>
 
         <div class="section">
@@ -165,7 +171,7 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
 let state = {
-    rooms: [], walls: [], doors: [], windows: [], manikins: [],
+    rooms: [], walls: [], doors: [], windows: [], manikins: [], dimensions: [],
     history: [],        // 履歴
     historyIndex: -1,   // 履歴の現在位置
     landBoundary: null, // 敷地範囲
@@ -173,7 +179,8 @@ let state = {
     isDragging: false, dragStart: null, dragOffset: null,
     wallThickness: 15, gridSize: 45, showGrid: true, scale: 50, zoomLevel: 1.5,
     wallStartVertex: null, tempWallEndPos: null, edgeNormal: null,
-    isPanning: false, panOffset: { x: 0, y: 0 }  // パン機能用
+    isPanning: false, panOffset: { x: 0, y: 0 },  // パン機能用
+    dimensionStart: null, tempDimensionEnd: null  // 寸法線用
 };
 
 //ドア・窓を壁の辺に配置する関数
@@ -228,6 +235,7 @@ function saveHistory() {
         doors: JSON.parse(JSON.stringify(state.doors)),
         windows: JSON.parse(JSON.stringify(state.windows)),
         manikins: JSON.parse(JSON.stringify(state.manikins)),
+        dimensions: JSON.parse(JSON.stringify(state.dimensions)),
         landBoundary: state.landBoundary ? JSON.parse(JSON.stringify(state.landBoundary)) : null
     };
     state.history.push(snapshot);
@@ -248,6 +256,7 @@ function undo() {
         state.doors = JSON.parse(JSON.stringify(snapshot.doors));
         state.windows = JSON.parse(JSON.stringify(snapshot.windows));
         state.manikins = JSON.parse(JSON.stringify(snapshot.manikins));
+        state.dimensions = JSON.parse(JSON.stringify(snapshot.dimensions));
         state.landBoundary = snapshot.landBoundary ? JSON.parse(JSON.stringify(snapshot.landBoundary)) : null;
         state.selectedItem = null;
         state.selectedVertex = null;
@@ -266,6 +275,7 @@ function redo() {
         state.doors = JSON.parse(JSON.stringify(snapshot.doors));
         state.windows = JSON.parse(JSON.stringify(snapshot.windows));
         state.manikins = JSON.parse(JSON.stringify(snapshot.manikins));
+        state.dimensions = JSON.parse(JSON.stringify(snapshot.dimensions));
         state.landBoundary = snapshot.landBoundary ? JSON.parse(JSON.stringify(snapshot.landBoundary)) : null;
         state.selectedItem = null;
         state.selectedVertex = null;
@@ -347,6 +357,45 @@ function distanceToSegment(px, py, x1, y1, x2, y2) {
     return Math.sqrt((px - nx) ** 2 + (py - ny) ** 2);
 }
 function getEdgeMidpoint(v1, v2) { return { x: (v1.x + v2.x) / 2, y: (v1.y + v2.y) / 2 }; }
+
+// 寸法線の実際の座標を取得（参照先の現在位置を反映）
+function getDimensionCoords(dim) {
+    const getPointCoords = (ref) => {
+        if (ref.type === 'vertex') {
+            const room = state.rooms.find(r => r.id === ref.roomId);
+            if (room && room.vertices[ref.vertexIndex]) {
+                return { x: room.vertices[ref.vertexIndex].x, y: room.vertices[ref.vertexIndex].y };
+            }
+        } else if (ref.type === 'edge') {
+            const room = state.rooms.find(r => r.id === ref.roomId);
+            if (room) {
+                const v1 = room.vertices[ref.edgeIndex];
+                const v2 = room.vertices[(ref.edgeIndex + 1) % room.vertices.length];
+                if (v1 && v2) {
+                    return getEdgeMidpoint(v1, v2);
+                }
+            }
+        } else if (ref.type === 'wall-vertex') {
+            const wall = state.walls.find(w => w.id === ref.wallId);
+            if (wall) {
+                return ref.endpoint === 1 ? { x: wall.x1, y: wall.y1 } : { x: wall.x2, y: wall.y2 };
+            }
+        } else if (ref.type === 'wall-midpoint') {
+            const wall = state.walls.find(w => w.id === ref.wallId);
+            if (wall) {
+                return { x: (wall.x1 + wall.x2) / 2, y: (wall.y1 + wall.y2) / 2 };
+            }
+        } else if (ref.type === 'point') {
+            return { x: ref.x, y: ref.y };
+        }
+        return null;
+    };
+    
+    const p1 = getPointCoords(dim.start);
+    const p2 = getPointCoords(dim.end);
+    
+    return (p1 && p2) ? { p1, p2 } : null;
+}
 
 // キャンバスサイズの調整
 function resizeCanvas() {
@@ -619,6 +668,252 @@ function draw() {
         ctx.restore();
     });
 
+    // 寸法線の描画
+    state.dimensions.forEach(dim => {
+        const coords = getDimensionCoords(dim);
+        if (!coords) return;
+        
+        const { p1, p2 } = coords;
+        const sel = state.selectedItem?.id === dim.id;
+        
+        // 辺の方向を取得する関数
+        const getEdgeDirection = (ref) => {
+            if (ref.type === 'edge') {
+                const room = state.rooms.find(r => r.id === ref.roomId);
+                if (room) {
+                    const v1 = room.vertices[ref.edgeIndex];
+                    const v2 = room.vertices[(ref.edgeIndex + 1) % room.vertices.length];
+                    const dx = v2.x - v1.x;
+                    const dy = v2.y - v1.y;
+                    const len = Math.sqrt(dx * dx + dy * dy);
+                    return { dx: dx / len, dy: dy / len, angle: Math.atan2(dy, dx) };
+                }
+            } else if (ref.type === 'wall-midpoint') {
+                const wall = state.walls.find(w => w.id === ref.wallId);
+                if (wall) {
+                    const dx = wall.x2 - wall.x1;
+                    const dy = wall.y2 - wall.y1;
+                    const len = Math.sqrt(dx * dx + dy * dy);
+                    return { dx: dx / len, dy: dy / len, angle: Math.atan2(dy, dx) };
+                }
+            }
+            return null;
+        };
+        
+        const startEdge = getEdgeDirection(dim.start);
+        const endEdge = getEdgeDirection(dim.end);
+        
+        let ox1, oy1, ox2, oy2, length, angle;
+        
+        // 辺が含まれる場合は、辺に平行な寸法線を引く
+        if (startEdge || endEdge) {
+            // 辺の方向を決定（始点が辺なら始点、終点が辺なら終点）
+            const refEdge = startEdge || endEdge;
+            angle = refEdge.angle;
+            const edgeDx = refEdge.dx;
+            const edgeDy = refEdge.dy;
+            
+            // 両方が辺の場合は、辺と辺の間の距離を測定
+            if (startEdge && endEdge) {
+                // 実際にクリックした位置（辺上の点）を使用
+                const edge1Point = p1;
+                const edge2Point = p2;
+                
+                // 辺の方向を判定（水平寄りか垂直寄りか）
+                const isHorizontal = Math.abs(edgeDx) > Math.abs(edgeDy);
+                
+                // 2点間の距離
+                const dx = edge2Point.x - edge1Point.x;
+                const dy = edge2Point.y - edge1Point.y;
+                
+                if (isHorizontal) {
+                    // 辺が水平寄り → 垂直方向の距離を測定
+                    length = Math.abs(dy);
+                    angle = Math.PI / 2; // 垂直
+                    const offsetDist = dim.offset || 30;
+                    ox1 = edge1Point.x + offsetDist;
+                    oy1 = edge1Point.y;
+                    ox2 = edge1Point.x + offsetDist;
+                    oy2 = edge2Point.y;
+                 } else {
+                    // 辺が垂直寄り → 水平方向の距離を測定
+                    length = Math.abs(dx);
+                    angle = 0; // 水平
+                    const offsetDist = dim.offset || 30;
+                    ox1 = edge1Point.x;
+                    oy1 = edge1Point.y + offsetDist;
+                    ox2 = edge2Point.x;
+                    oy2 = edge1Point.y + offsetDist;
+                }
+            }else{
+                // 片方が辺、片方が点の場合は、辺に平行な距離
+                const vecX = p2.x - p1.x;
+                const vecY = p2.y - p1.y;
+                const projLength = vecX * edgeDx + vecY * edgeDy;
+                
+                // 辺に平行な寸法線の長さ
+                length = Math.abs(projLength);
+                
+                // 法線方向
+                const offsetDist = dim.offset || 30;
+                const nx = -edgeDy;
+                const ny = edgeDx;
+                
+                // 寸法線の両端
+                ox1 = p1.x + nx * offsetDist;
+                oy1 = p1.y + ny * offsetDist;
+                ox2 = ox1 + edgeDx * projLength;
+                oy2 = oy1 + edgeDy * projLength;
+            }
+        } else {
+            // 片方または両方が点の場合は、通常の寸法線
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            length = Math.sqrt(dx * dx + dy * dy);
+            
+            if (length < 0.1) return;
+            
+            angle = Math.atan2(dy, dx);
+            const offsetDist = dim.offset || 30;
+            const nx = -dy / length;
+            const ny = dx / length;
+            
+            ox1 = p1.x + nx * offsetDist;
+            oy1 = p1.y + ny * offsetDist;
+            ox2 = p2.x + nx * offsetDist;
+            oy2 = p2.y + ny * offsetDist;
+        }
+        
+        if (length < 0.1) return;
+        ctx.strokeStyle = sel ? '#2196f3' : '#666';
+        ctx.lineWidth = 1 / state.zoomLevel;
+        
+        ctx.setLineDash([3 / state.zoomLevel, 3 / state.zoomLevel]);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(ox1, oy1);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(p2.x, p2.y);
+        ctx.lineTo(ox2, oy2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        ctx.lineWidth = 1.5 / state.zoomLevel;
+        ctx.beginPath();
+        ctx.moveTo(ox1, oy1);
+        ctx.lineTo(ox2, oy2);
+        ctx.stroke();
+        
+        const arrowSize = 6 / state.zoomLevel;
+        
+        ctx.beginPath();
+        ctx.moveTo(ox1, oy1);
+        ctx.lineTo(ox1 + arrowSize * Math.cos(angle + Math.PI * 0.85), oy1 + arrowSize * Math.sin(angle + Math.PI * 0.85));
+        ctx.moveTo(ox1, oy1);
+        ctx.lineTo(ox1 + arrowSize * Math.cos(angle - Math.PI * 0.85), oy1 + arrowSize * Math.sin(angle - Math.PI * 0.85));
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.moveTo(ox2, oy2);
+        ctx.lineTo(ox2 - arrowSize * Math.cos(angle + Math.PI * 0.85), oy2 - arrowSize * Math.sin(angle + Math.PI * 0.85));
+        ctx.moveTo(ox2, oy2);
+        ctx.lineTo(ox2 - arrowSize * Math.cos(angle - Math.PI * 0.85), oy2 - arrowSize * Math.sin(angle - Math.PI * 0.85));
+        ctx.stroke();
+        
+        const mx = (ox1 + ox2) / 2;
+        const my = (oy1 + oy2) / 2;
+        
+        ctx.save();
+        ctx.translate(mx, my);
+        ctx.rotate(angle);
+        
+        const text = formatLength(length);
+        ctx.font = `bold ${12 / state.zoomLevel}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const metrics = ctx.measureText(text);
+        const padding = 3 / state.zoomLevel;
+        
+        ctx.fillStyle = 'white';
+        ctx.fillRect(-metrics.width / 2 - padding, -7 / state.zoomLevel, metrics.width + padding * 2, 14 / state.zoomLevel);
+        
+        ctx.fillStyle = sel ? '#2196f3' : '#333';
+        ctx.fillText(text, 0, 0);
+        
+        ctx.restore();
+    });
+
+        // 寸法線作成中のプレビュー
+    if (state.selectedTool === 'dimension' && state.dimensionStart && state.tempDimensionEnd) {
+        const p1 = state.dimensionStart;
+        const p2 = state.tempDimensionEnd;
+        
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        
+        ctx.strokeStyle = '#ff9800';
+        ctx.lineWidth = 2 / state.zoomLevel;
+        ctx.setLineDash([5 / state.zoomLevel, 5 / state.zoomLevel]);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        ctx.fillStyle = '#ff9800';
+        ctx.font = `bold ${12 / state.zoomLevel}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(formatLength(length), (p1.x + p2.x) / 2, (p1.y + p2.y) / 2 - 10 / state.zoomLevel);
+    }
+        // 寸法線ツール使用中：選択可能な点や辺をハイライト
+    if (state.selectedTool === 'dimension') {
+        // 選択済みの始点をハイライト
+        if (state.dimensionStart) {
+            ctx.fillStyle = '#4caf50';
+            ctx.strokeStyle = '#4caf50';
+            ctx.lineWidth = 3 / state.zoomLevel;
+            
+            if (state.dimensionStart.type === 'vertex') {
+                const room = state.rooms.find(r => r.id === state.dimensionStart.roomId);
+                if (room) {
+                    const v = room.vertices[state.dimensionStart.vertexIndex];
+                    ctx.beginPath();
+                    ctx.arc(v.x, v.y, 8 / state.zoomLevel, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } else if (state.dimensionStart.type === 'edge') {
+                const room = state.rooms.find(r => r.id === state.dimensionStart.roomId);
+                if (room) {
+                    const v1 = room.vertices[state.dimensionStart.edgeIndex];
+                    const v2 = room.vertices[(state.dimensionStart.edgeIndex + 1) % room.vertices.length];
+                    ctx.beginPath();
+                    ctx.moveTo(v1.x, v1.y);
+                    ctx.lineTo(v2.x, v2.y);
+                    ctx.stroke();
+                }
+            } else if (state.dimensionStart.type === 'wall-vertex') {
+                const wall = state.walls.find(w => w.id === state.dimensionStart.wallId);
+                if (wall) {
+                    const px = state.dimensionStart.endpoint === 1 ? wall.x1 : wall.x2;
+                    const py = state.dimensionStart.endpoint === 1 ? wall.y1 : wall.y2;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 8 / state.zoomLevel, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } else if (state.dimensionStart.type === 'wall-midpoint') {
+                const wall = state.walls.find(w => w.id === state.dimensionStart.wallId);
+                if (wall) {
+                    ctx.beginPath();
+                    ctx.moveTo(wall.x1, wall.y1);
+                    ctx.lineTo(wall.x2, wall.y2);
+                    ctx.stroke();
+                }
+            }
+        }
+    }
+
     ctx.restore();
     updateUI();
 }
@@ -632,7 +927,7 @@ function updateUI() {
 
     if (state.selectedItem) {
         document.getElementById('selectedPanel').style.display = 'block';
-        const tt = { room: '部屋', wall: '壁', door: 'ドア', window: '窓', manikin: '人型' };
+        const tt = { room: '部屋', wall: '壁', door: 'ドア', window: '窓', manikin: '人型', dimension: '寸法線' };
         document.getElementById('selectedType').innerHTML = '<strong>' + tt[state.selectedItem.type] + '</strong>';
 
         let c = '';
@@ -648,6 +943,8 @@ function updateUI() {
             const len = Math.sqrt((state.selectedItem.x2 - state.selectedItem.x1) ** 2 + (state.selectedItem.y2 - state.selectedItem.y1) ** 2);
             c = `<label>壁の長さ (cm)</label><input type="number" id="wallLength" value="${Math.round(len / state.scale * 100)}" min="10" max="1000" step="5">
 <label>壁の厚さ (cm)</label><input type="number" id="wallThicknessItem" value="${state.selectedItem.thickness}" min="5" max="50" step="5">`;
+        } else if (state.selectedItem.type === 'dimension') {
+            c = `<label>オフセット距離</label><input type="number" id="dimOffset" value="${state.selectedItem.offset || 30}" min="-200" max="200" step="5">`;
         }
         document.getElementById('selectedControls').innerHTML = c;
 
@@ -674,6 +971,11 @@ function updateUI() {
             });
             const wt = document.getElementById('wallThicknessItem');
             if (wt) wt.addEventListener('input', e => { state.selectedItem.thickness = parseInt(e.target.value); draw(); });
+            const dimOffset = document.getElementById('dimOffset');
+            if (dimOffset) dimOffset.addEventListener('input', e => { 
+                state.selectedItem.offset = parseFloat(e.target.value);
+                draw();
+            });
         }, 0);
     } else {
         document.getElementById('selectedPanel').style.display = 'none';
@@ -773,14 +1075,85 @@ if (state.selectedTool === 'select') {
                 return { type: 'window', ...w };
         }
     }
+
+    //findItemAt関数に寸法線の判定を追加
     for (let m of [...state.manikins].reverse()) {
         if (Math.abs(x - m.x) < 30 / state.zoomLevel && Math.abs(y - m.y) < 30 / state.zoomLevel)
             return { type: 'manikin', ...m };
     }
+    for (let dim of [...state.dimensions].reverse()) {
+        const coords = getDimensionCoords(dim);
+        if (coords) {
+            const { p1, p2 } = coords;
+            
+            // 辺の方向を取得する関数
+            const getEdgeDirection = (ref) => {
+                if (ref.type === 'edge') {
+                    const room = state.rooms.find(r => r.id === ref.roomId);
+                    if (room) {
+                        const v1 = room.vertices[ref.edgeIndex];
+                        const v2 = room.vertices[(ref.edgeIndex + 1) % room.vertices.length];
+                        const dx = v2.x - v1.x;
+                        const dy = v2.y - v1.y;
+                        const len = Math.sqrt(dx * dx + dy * dy);
+                        return { dx: dx / len, dy: dy / len };
+                    }
+                }
+                return null;
+            };
+            
+            const startEdge = getEdgeDirection(dim.start);
+            const endEdge = getEdgeDirection(dim.end);
+            
+            let ox1, oy1, ox2, oy2;
+            const offsetDist = dim.offset || 30;
+            
+            if (startEdge || endEdge) {
+                const refEdge = startEdge || endEdge;
+                const edgeDx = refEdge.dx;
+                const edgeDy = refEdge.dy;
+                const isHorizontal = Math.abs(edgeDx) > Math.abs(edgeDy);
+                
+            if (isHorizontal) {
+                ox1 = p1.x + offsetDist;
+                oy1 = p1.y;
+                ox2 = p1.x + offsetDist;
+                oy2 = p2.y;
+            } else {
+                ox1 = p1.x;
+                oy1 = p1.y + offsetDist;
+                ox2 = p2.x;
+                oy2 = p1.y + offsetDist;
+            }
+            } else {
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                if (length < 0.1) continue;
+                const nx = -dy / length;
+                const ny = dx / length;
+                ox1 = p1.x + nx * offsetDist;
+                oy1 = p1.y + ny * offsetDist;
+                ox2 = p2.x + nx * offsetDist;
+                oy2 = p2.y + ny * offsetDist;
+            }
+            
+            if (distanceToSegment(x, y, ox1, oy1, ox2, oy2) < 10 / state.zoomLevel)
+                return { type: 'dimension', ...dim };
+        }
+    }
     return null;
 }
 
+// Ctrl+スクロールでのブラウザズームを無効化
+canvas.addEventListener('wheel', e => {
+    if (e.ctrlKey) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
 canvas.addEventListener('mousedown', e => {
+    console.log('mousedown:', state.selectedTool, 'isPanning:', state.isPanning, 'zoomLevel:', state.zoomLevel);  // ← 追加
     const rect = canvas.getBoundingClientRect();
     const x = ((e.clientX - rect.left) - state.panOffset.x) / state.zoomLevel;
     const y = ((e.clientY - rect.top) - state.panOffset.y) / state.zoomLevel;
@@ -796,25 +1169,224 @@ canvas.addEventListener('mousedown', e => {
     
     const f = findItemAt(x, y);
 
+    // 削除ツールの処理
+    if (state.selectedTool === 'delete' && f) {
+        if (f.type === 'room') state.rooms = state.rooms.filter(r => r.id !== f.id);
+        else if (f.type === 'wall') state.walls = state.walls.filter(w => w.id !== f.id);
+        else if (f.type === 'door') state.doors = state.doors.filter(d => d.id !== f.id);
+        else if (f.type === 'window') state.windows = state.windows.filter(w => w.id !== f.id);
+        else if (f.type === 'manikin') state.manikins = state.manikins.filter(m => m.id !== f.id);
+        else if (f.type === 'dimension') state.dimensions = state.dimensions.filter(d => d.id !== f.id);
+        saveHistory();
+        draw();
+        return;
+    }
+
     if (state.selectedTool === 'wall') {
         const v = findNearestVertex(x, y, 15);
-        if (v) {
-            if (!state.wallStartVertex) {
-                state.wallStartVertex = v;
-                draw();
-            } else {
-                state.walls.push({
-                    id: Date.now(), type: 'wall',
-                    x1: state.wallStartVertex.x, y1: state.wallStartVertex.y,
-                    x2: v.x, y2: v.y, thickness: state.wallThickness
-                });
-                state.wallStartVertex = null;
-                state.tempWallEndPos = null;
-                saveHistory();
-                draw();
-            }
-            return;
+        const snapPoint = v || snapPointToGrid({ x, y }); // 頂点がなければグリッドスナップ
+        
+        if (!state.wallStartVertex) {
+            state.wallStartVertex = snapPoint;
+            draw();
+        } else {
+            state.walls.push({
+                id: Date.now(), type: 'wall',
+                x1: state.wallStartVertex.x, y1: state.wallStartVertex.y,
+                x2: snapPoint.x, y2: snapPoint.y, thickness: state.wallThickness
+            });
+            state.wallStartVertex = null;
+            state.tempWallEndPos = null;
+            saveHistory();
+            draw();
         }
+        return;
+    }
+
+    //mousedownイベントに寸法線作成処理を追加
+    if (state.selectedTool === 'dimension') {
+        const getDimensionReference = (x, y) => {
+            for (let r of state.rooms) {
+                for (let i = 0; i < r.vertices.length; i++) {
+                    const v = r.vertices[i];
+                    if (Math.abs(x - v.x) < 10 / state.zoomLevel && Math.abs(y - v.y) < 10 / state.zoomLevel) {
+                        return { type: 'vertex', roomId: r.id, vertexIndex: i, x: v.x, y: v.y };
+                    }
+                }
+            }
+            
+            // 辺全体を判定（中点以外でもOK）
+            for (let r of state.rooms) {
+                for (let i = 0; i < r.vertices.length; i++) {
+                    const j = (i + 1) % r.vertices.length;
+                    const v1 = r.vertices[i];
+                    const v2 = r.vertices[j];
+                    const dist = distanceToSegment(x, y, v1.x, v1.y, v2.x, v2.y);
+                    if (dist < 15 / state.zoomLevel) {
+                        // クリック位置を辺上に投影
+                        const dx = v2.x - v1.x;
+                        const dy = v2.y - v1.y;
+                        const l2 = dx * dx + dy * dy;
+                        let t = ((x - v1.x) * dx + (y - v1.y) * dy) / l2;
+                        t = Math.max(0, Math.min(1, t));
+                        const px = v1.x + t * dx;
+                        const py = v1.y + t * dy;
+                        return { type: 'edge', roomId: r.id, edgeIndex: i, x: px, y: py };
+                    }
+                }
+            }
+            
+            for (let w of state.walls) {
+                if (Math.abs(x - w.x1) < 10 / state.zoomLevel && Math.abs(y - w.y1) < 10 / state.zoomLevel) {
+                    return { type: 'wall-vertex', wallId: w.id, endpoint: 1, x: w.x1, y: w.y1 };
+                }
+                if (Math.abs(x - w.x2) < 10 / state.zoomLevel && Math.abs(y - w.y2) < 10 / state.zoomLevel) {
+                    return { type: 'wall-vertex', wallId: w.id, endpoint: 2, x: w.x2, y: w.y2 };
+                }
+                const mx = (w.x1 + w.x2) / 2;
+                const my = (w.y1 + w.y2) / 2;
+                if (Math.abs(x - mx) < 12 / state.zoomLevel && Math.abs(y - my) < 12 / state.zoomLevel) {
+                    return { type: 'wall-midpoint', wallId: w.id, x: mx, y: my };
+                }
+            }
+            
+            return null;  // 空白の点は選択不可
+        };
+        
+        const ref = getDimensionReference(x, y);
+        
+        if (!state.dimensionStart) {
+            state.dimensionStart = ref;
+            draw();
+        } else {
+            // マウス位置から自動的にオフセット方向を計算
+let autoOffset = 30;
+if (state.tempDimensionEnd) {
+    const startEdge = state.dimensionStart.type === 'edge' || state.dimensionStart.type === 'wall-midpoint';
+    const endEdge = ref.type === 'edge' || ref.type === 'wall-midpoint';
+    
+    // 辺が含まれる場合
+    if (startEdge && endEdge) {
+        // 2つの辺の距離の方向を判定
+        const p1 = state.dimensionStart;
+        const p2 = ref;
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        
+        // 辺の方向を取得
+        let edgeDx = 0, edgeDy = 0;
+        if (state.dimensionStart.type === 'edge') {
+            const room = state.rooms.find(r => r.id === state.dimensionStart.roomId);
+            const v1 = room.vertices[state.dimensionStart.edgeIndex];
+            const v2 = room.vertices[(state.dimensionStart.edgeIndex + 1) % room.vertices.length];
+            edgeDx = v2.x - v1.x;
+            edgeDy = v2.y - v1.y;
+        }
+        
+        const isHorizontal = Math.abs(edgeDx) > Math.abs(edgeDy);
+        if (isHorizontal) {
+            autoOffset = dx >= 0 ? 30 : -30;
+        } else {
+            autoOffset = dy >= 0 ? 30 : -30;
+        }
+    } else if (startEdge || endEdge) {
+        // 辺の法線方向を計算
+        let nx = 0, ny = 0;
+        
+        if (state.dimensionStart.type === 'edge') {
+            const room = state.rooms.find(r => r.id === state.dimensionStart.roomId);
+            const v1 = room.vertices[state.dimensionStart.edgeIndex];
+            const v2 = room.vertices[(state.dimensionStart.edgeIndex + 1) % room.vertices.length];
+            const dx = v2.x - v1.x;
+            const dy = v2.y - v1.y;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            nx = -dy / len;
+            ny = dx / len;
+            // マウス位置から自動的にオフセット方向を計算
+            // let autoOffset = 30;
+            // if (state.tempDimensionEnd) {
+            //     const startEdge = state.dimensionStart.type === 'edge' || state.dimensionStart.type === 'wall-midpoint';
+            //     const endEdge = ref.type === 'edge' || ref.type === 'wall-midpoint';
+                
+            //     // 辺が含まれる場合
+            //     if (startEdge || endEdge) {
+            //         // 辺の法線方向を計算
+            //         let nx = 0, ny = 0;
+                    
+            //         if (state.dimensionStart.type === 'edge') {
+            //             const room = state.rooms.find(r => r.id === state.dimensionStart.roomId);
+            //             const v1 = room.vertices[state.dimensionStart.edgeIndex];
+            //             const v2 = room.vertices[(state.dimensionStart.edgeIndex + 1) % room.vertices.length];
+            //             const dx = v2.x - v1.x;
+            //             const dy = v2.y - v1.y;
+            //             const len = Math.sqrt(dx * dx + dy * dy);
+            //             nx = -dy / len;
+            //             ny = dx / len;
+                    } else if (state.dimensionStart.type === 'wall-midpoint') {
+                        const wall = state.walls.find(w => w.id === state.dimensionStart.wallId);
+                        const dx = wall.x2 - wall.x1;
+                        const dy = wall.y2 - wall.y1;
+                        const len = Math.sqrt(dx * dx + dy * dy);
+                        nx = -dy / len;
+                        ny = dx / len;
+                    } else if (ref.type === 'edge') {
+                        const room = state.rooms.find(r => r.id === ref.roomId);
+                        const v1 = room.vertices[ref.edgeIndex];
+                        const v2 = room.vertices[(ref.edgeIndex + 1) % room.vertices.length];
+                        const dx = v2.x - v1.x;
+                        const dy = v2.y - v1.y;
+                        const len = Math.sqrt(dx * dx + dy * dy);
+                        nx = -dy / len;
+                        ny = dx / len;
+                    } else if (ref.type === 'wall-midpoint') {
+                        const wall = state.walls.find(w => w.id === ref.wallId);
+                        const dx = wall.x2 - wall.x1;
+                        const dy = wall.y2 - wall.y1;
+                        const len = Math.sqrt(dx * dx + dy * dy);
+                        nx = -dy / len;
+                        ny = dx / len;
+                    }
+                    
+                    // マウス位置からの方向
+                    const p1 = state.dimensionStart;
+                    const mx = state.tempDimensionEnd.x - p1.x;
+                    const my = state.tempDimensionEnd.y - p1.y;
+                    
+                    // 法線方向とマウス方向の内積で向きを判定
+                    const dot = mx * nx + my * ny;
+                    autoOffset = dot > 0 ? 30 : -30;
+                } else {
+                    // 点同士の場合もマウス方向に応じてオフセット
+                    const p1 = state.dimensionStart;
+                    const p2 = ref;
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+                    const len = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (len > 0.1) {
+                        const nx = -dy / len;
+                        const ny = dx / len;
+                        const mx = state.tempDimensionEnd.x - p1.x;
+                        const my = state.tempDimensionEnd.y - p1.y;
+                        const dot = mx * nx + my * ny;
+                        autoOffset = dot > 0 ? 30 : -30;
+                    }
+                }
+            }
+            
+            state.dimensions.push({
+                id: Date.now(),
+                type: 'dimension',
+                start: state.dimensionStart,
+                end: ref,
+                offset: autoOffset
+            });
+            state.dimensionStart = null;
+            state.tempDimensionEnd = null;
+            saveHistory();
+            draw();
+        }
+        return;
     }
 
     if (f && f.type === 'wall') {
@@ -970,6 +1542,13 @@ canvas.addEventListener('mousemove', e => {
         return;
     }
 
+    // mousemoveイベントに寸法線プレビューを追加
+    if (state.selectedTool === 'dimension' && state.dimensionStart) {
+        state.tempDimensionEnd = { x, y };
+        draw();
+        return;
+    }
+
     if (state.isDragging) {
         if (state.isRotating && state.selectedItem && state.selectedItem.type === 'wall') {
             const w = state.selectedItem;
@@ -1094,7 +1673,65 @@ canvas.addEventListener('mousemove', e => {
             state.selectedItem.x2 += dx; state.selectedItem.y2 += dy;
             state.dragStart = { x, y };
             draw();
-        } else if (state.selectedItem && (state.selectedItem.type === 'door' || state.selectedItem.type === 'window')) {
+        } else if (state.selectedItem && state.selectedItem.type === 'dimension') {
+             console.log('寸法線ドラッグ中', state.selectedItem.offset);  // ← デバッグ用
+            const dx = x - state.dragStart.x;
+            const dy = y - state.dragStart.y;
+            
+            // マウスの移動方向から適切なオフセット量を計算
+            const coords = getDimensionCoords(state.selectedItem);
+            if (coords) {
+                const { p1, p2 } = coords;
+                
+                // 辺の方向を判定
+                const getEdgeDirection = (ref) => {
+                    if (ref.type === 'edge') {
+                        const room = state.rooms.find(r => r.id === ref.roomId);
+                        if (room) {
+                            const v1 = room.vertices[ref.edgeIndex];
+                            const v2 = room.vertices[(ref.edgeIndex + 1) % room.vertices.length];
+                            const dx = v2.x - v1.x;
+                            const dy = v2.y - v1.y;
+                            const len = Math.sqrt(dx * dx + dy * dy);
+                            return { dx: dx / len, dy: dy / len };
+                        }
+                    }
+                    return null;
+                };
+                
+                const startEdge = getEdgeDirection(state.selectedItem.start);
+                const endEdge = getEdgeDirection(state.selectedItem.end);
+                
+                if (startEdge || endEdge) {
+                    // 辺が含まれる場合は、辺の方向に応じたドラッグ
+                    const refEdge = startEdge || endEdge;
+                    const isHorizontal = Math.abs(refEdge.dx) > Math.abs(refEdge.dy);
+                    
+                    if (isHorizontal) {
+                        // 水平寄り → 横方向の移動を検出
+                        state.selectedItem.offset = (state.selectedItem.offset || 30) + dx;
+                    } else {
+                        // 垂直寄り → 縦方向の移動を検出
+                        state.selectedItem.offset = (state.selectedItem.offset || 30) + dy;
+                    }
+                } else {
+                    // 点同士の場合は従来通り
+                    const vecX = p2.x - p1.x;
+                    const vecY = p2.y - p1.y;
+                    const len = Math.sqrt(vecX * vecX + vecY * vecY);
+                    
+                    if (len > 0.1) {
+                        const nx = -vecY / len;
+                        const ny = vecX / len;
+                        const offsetDelta = dx * nx + dy * ny;
+                        state.selectedItem.offset = (state.selectedItem.offset || 30) + offsetDelta;
+                    }
+                }
+            }
+            
+            state.dragStart = { x, y };
+            draw();
+        }else if (state.selectedItem && (state.selectedItem.type === 'door' || state.selectedItem.type === 'window')) {
             // ドア・窓は辺に沿って移動
             const edge = findNearestEdge(x, y, 100);
             if (edge && edge.roomId === state.selectedItem.roomId && edge.edgeIndex === state.selectedItem.edgeIndex) {
@@ -1125,6 +1762,7 @@ canvas.addEventListener('contextmenu', e => {
     e.preventDefault();
 });
 
+//ツール切り替え時に寸法線の一時状態をクリア
 document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
     b.addEventListener('click', () => {
         document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => btn.classList.remove('active'));
@@ -1134,6 +1772,8 @@ document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
         state.selectedEdge = null;
         state.wallStartVertex = null;
         state.tempWallEndPos = null;
+        state.dimensionStart = null;
+        state.tempDimensionEnd = null;
         canvas.style.cursor = state.selectedTool === 'add-vertex' ? 'crosshair' : 'default';
         draw();
     });
@@ -1171,6 +1811,7 @@ document.getElementById('rotateBtn').addEventListener('click', () => {
     draw();
 });
 
+//deleteBtn（削除ボタン）
 document.getElementById('deleteBtn').addEventListener('click', () => {
     if (!state.selectedItem) return;
     if (state.selectedItem.type === 'room') state.rooms = state.rooms.filter(r => r.id !== state.selectedItem.id);
@@ -1178,6 +1819,7 @@ document.getElementById('deleteBtn').addEventListener('click', () => {
     else if (state.selectedItem.type === 'door') state.doors = state.doors.filter(d => d.id !== state.selectedItem.id);
     else if (state.selectedItem.type === 'window') state.windows = state.windows.filter(w => w.id !== state.selectedItem.id);
     else if (state.selectedItem.type === 'manikin') state.manikins = state.manikins.filter(m => m.id !== state.selectedItem.id);
+    else if (state.selectedItem.type === 'dimension') state.dimensions = state.dimensions.filter(d => d.id !== state.selectedItem.id);
     state.selectedItem = null;
     state.selectedVertex = null;
     state.selectedEdge = null;
@@ -1185,8 +1827,9 @@ document.getElementById('deleteBtn').addEventListener('click', () => {
     draw();
 });
 
+//saveBtn（保存ボタン）
 document.getElementById('saveBtn').addEventListener('click', () => {
-    const data = { rooms: state.rooms, walls: state.walls, doors: state.doors, windows: state.windows, manikins: state.manikins };
+    const data = { rooms: state.rooms, walls: state.walls, doors: state.doors, windows: state.windows, manikins: state.manikins, dimensions: state.dimensions };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -1194,6 +1837,7 @@ document.getElementById('saveBtn').addEventListener('click', () => {
     a.click();
 });
 
+// loadBtn（読込ボタン）
 document.getElementById('loadBtn').addEventListener('click', () => { document.getElementById('fileInput').click(); });
 document.getElementById('fileInput').addEventListener('change', e => {
     const f = e.target.files[0];
@@ -1207,6 +1851,7 @@ document.getElementById('fileInput').addEventListener('change', e => {
             state.doors = d.doors || [];
             state.windows = d.windows || [];
             state.manikins = d.manikins || [];
+            state.dimensions = d.dimensions || [];
             state.selectedItem = null;
             state.selectedVertex = null;
             state.selectedEdge = null;
@@ -1248,9 +1893,10 @@ document.getElementById('clearLandBtn').addEventListener('click', () => {
     draw();
 });
 
+//clearBtn（クリアボタン）
 document.getElementById('clearBtn').addEventListener('click', () => {
     if (confirm('すべて削除しますか?')) {
-        state.rooms = []; state.walls = []; state.doors = []; state.windows = []; state.manikins = [];
+        state.rooms = []; state.walls = []; state.doors = []; state.windows = []; state.manikins = []; state.dimensions = [];
         state.selectedItem = null; state.selectedVertex = null; state.selectedEdge = null;
         saveHistory();
         draw();
