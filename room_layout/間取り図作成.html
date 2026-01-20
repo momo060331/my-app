@@ -304,7 +304,82 @@ function switchToSelectTool() {
 }
 
 function snapToGrid(v) { const g = state.gridSize * 0.2; return Math.round(v / g) * g; }
+// function snapPointToGrid(p) { return { x: snapToGrid(p.x), y: snapToGrid(p.y) }; }
 function snapPointToGrid(p) { return { x: snapToGrid(p.x), y: snapToGrid(p.y) }; }
+
+// 辺スナップ機能: 近くの辺に吸着
+function snapRoomToNearbyEdges(room, threshold = 15) {
+    const otherRooms = state.rooms.filter(r => r.id !== room.id);
+    if (otherRooms.length === 0) return;
+    
+    let bestSnap = null;
+    let minDistance = threshold;
+    
+    // 移動中の部屋の各辺をチェック
+    for (let i = 0; i < room.vertices.length; i++) {
+        const j = (i + 1) % room.vertices.length;
+        const rv1 = room.vertices[i];
+        const rv2 = room.vertices[j];
+        
+        const rEdgeDx = rv2.x - rv1.x;
+        const rEdgeDy = rv2.y - rv1.y;
+        const rEdgeLen = Math.sqrt(rEdgeDx * rEdgeDx + rEdgeDy * rEdgeDy);
+        
+        if (rEdgeLen < 0.1) continue;
+        
+        // 他の部屋の各辺との距離をチェック
+        otherRooms.forEach(otherRoom => {
+            for (let oi = 0; oi < otherRoom.vertices.length; oi++) {
+                const oj = (oi + 1) % otherRoom.vertices.length;
+                const ov1 = otherRoom.vertices[oi];
+                const ov2 = otherRoom.vertices[oj];
+                
+                const oEdgeDx = ov2.x - ov1.x;
+                const oEdgeDy = ov2.y - ov1.y;
+                const oEdgeLen = Math.sqrt(oEdgeDx * oEdgeDx + oEdgeDy * oEdgeDy);
+                
+                if (oEdgeLen < 0.1) continue;
+                
+                // 2つの辺が平行かチェック（内積で判定）
+                const dot = (rEdgeDx * oEdgeDx + rEdgeDy * oEdgeDy) / (rEdgeLen * oEdgeLen);
+                const isParallel = Math.abs(Math.abs(dot) - 1) < 0.1; // ほぼ平行
+                
+                if (isParallel) {
+                    // 辺の中点間の距離を計算
+                    const rMidX = (rv1.x + rv2.x) / 2;
+                    const rMidY = (rv1.y + rv2.y) / 2;
+                    const oMidX = (ov1.x + ov2.x) / 2;
+                    const oMidY = (ov1.y + ov2.y) / 2;
+                    
+                    // 辺に垂直な方向の距離を計算
+                    const nx = -oEdgeDy / oEdgeLen;
+                    const ny = oEdgeDx / oEdgeLen;
+                    
+                    const dist = Math.abs((rMidX - oMidX) * nx + (rMidY - oMidY) * ny);
+                    
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        bestSnap = {
+                            offset: {
+                                x: ((oMidX - rMidX) * nx + (oMidY - rMidY) * ny) * nx,
+                                y: ((oMidX - rMidX) * nx + (oMidY - rMidY) * ny) * ny
+                            }
+                        };
+                    }
+                }
+            }
+        });
+    }
+    
+    // スナップを適用
+    if (bestSnap) {
+        room.vertices = room.vertices.map(v => ({
+            x: v.x + bestSnap.offset.x,
+            y: v.y + bestSnap.offset.y
+        }));
+    }
+}
+
 function calculatePolygonArea(vs) {
     let a = 0;
     for (let i = 0; i < vs.length; i++) {
@@ -1501,12 +1576,6 @@ if (state.tempDimensionEnd) {
     }
 });
 
-// canvas.addEventListener('mousemove', e => {
-//     const rect = canvas.getBoundingClientRect();
-//     const x = ((e.clientX - rect.left) - state.panOffset.x) / state.zoomLevel;
-//     const y = ((e.clientY - rect.top) - state.panOffset.y) / state.zoomLevel;
-
-//     if (state.isPanning) {
     canvas.addEventListener('mousemove', e => {
         const rect = canvas.getBoundingClientRect();
         const x = ((e.clientX - rect.left) - state.panOffset.x) / state.zoomLevel;
@@ -1756,20 +1825,25 @@ if (state.tempDimensionEnd) {
 
 // canvas.addEventListener('mouseup', () => {
 //     if (state.isDragging) {
+//         // ドラッグ終了時にグリッドスナップを適用
+//         if (state.selectedItem && state.selectedItem.type === 'room') {
+//             const r = state.rooms.find(rm => rm.id === state.selectedItem.id);
+//             if (r) {
+//                 r.vertices = r.vertices.map(v => snapPointToGrid(v));
+//             }
+//             draw();
+//         }
 //         saveHistory();
 //     }
-//     state.isDragging = false;
-//     state.isRotating = false;
-//     state.isPanning = false;
-//     state.selectedEdge = null;
-//     state.edgeNormal = null;
-// });
 canvas.addEventListener('mouseup', () => {
     if (state.isDragging) {
         // ドラッグ終了時にグリッドスナップを適用
         if (state.selectedItem && state.selectedItem.type === 'room') {
             const r = state.rooms.find(rm => rm.id === state.selectedItem.id);
             if (r) {
+                // まず辺スナップを試みる
+                snapRoomToNearbyEdges(r);
+                // その後グリッドスナップ
                 r.vertices = r.vertices.map(v => snapPointToGrid(v));
             }
             draw();
