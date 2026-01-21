@@ -170,11 +170,40 @@
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
+// ローカルストレージから復元
+function loadFromStorage() {
+    try {
+        const saved = localStorage.getItem('floorplan_autosave');
+        if (saved) {
+            const data = JSON.parse(saved);
+            return {
+                rooms: data.rooms || [],
+                walls: data.walls || [],
+                doors: data.doors || [],
+                windows: data.windows || [],
+                manikins: data.manikins || [],
+                dimensions: data.dimensions || [],
+                landBoundary: data.landBoundary || null
+            };
+        }
+    } catch (e) {
+        console.error('復元エラー:', e);
+    }
+    return null;
+}
+
+const savedData = loadFromStorage();
+
 let state = {
-    rooms: [], walls: [], doors: [], windows: [], manikins: [], dimensions: [],
+    rooms: savedData?.rooms || [],
+    walls: savedData?.walls || [],
+    doors: savedData?.doors || [],
+    windows: savedData?.windows || [],
+    manikins: savedData?.manikins || [],
+    dimensions: savedData?.dimensions || [],
     history: [],        // 履歴
     historyIndex: -1,   // 履歴の現在位置
-    landBoundary: null, // 敷地範囲
+    landBoundary: savedData?.landBoundary || null,
     selectedTool: 'select', selectedItem: null, selectedVertex: null, selectedEdge: null,
     isDragging: false, dragStart: null, dragOffset: null,
     wallThickness: 15, gridSize: 45, showGrid: true, scale: 50, zoomLevel: 1.5,
@@ -225,7 +254,24 @@ function findNearestEdge(x, y, threshold = 20) {
     return nearest;
 }
 
-// 履歴に状態を保存
+// 自動保存機能
+function autoSave() {
+    try {
+        const data = {
+            rooms: state.rooms,
+            walls: state.walls,
+            doors: state.doors,
+            windows: state.windows,
+            manikins: state.manikins,
+            dimensions: state.dimensions,
+            landBoundary: state.landBoundary
+        };
+        localStorage.setItem('floorplan_autosave', JSON.stringify(data));
+    } catch (e) {
+        console.error('自動保存エラー:', e);
+    }
+}
+
 function saveHistory() {
     // やり直し用の履歴をクリア
     state.history = state.history.slice(0, state.historyIndex + 1);
@@ -1001,8 +1047,13 @@ function updateUI() {
     document.getElementById('roomCount').textContent = state.rooms.length;
     document.getElementById('scaleDisplay').textContent = Math.round(state.zoomLevel * 100);
 
-    if (state.selectedItem) {
+    // 選択パネルのHTML再生成を避けるため、選択アイテムのIDをチェック
+    const currentSelectedId = document.getElementById('selectedPanel').dataset.selectedId;
+    const newSelectedId = state.selectedItem ? state.selectedItem.id : null;
+
+    if (state.selectedItem && currentSelectedId !== String(newSelectedId)) {
         document.getElementById('selectedPanel').style.display = 'block';
+        document.getElementById('selectedPanel').dataset.selectedId = newSelectedId;
         const tt = { room: '部屋', wall: '壁', door: 'ドア', window: '窓', manikin: '人型', dimension: '寸法線' };
         document.getElementById('selectedType').innerHTML = '<strong>' + tt[state.selectedItem.type] + '</strong>';
 
@@ -1026,9 +1077,21 @@ function updateUI() {
 
         setTimeout(() => {
             const rn = document.getElementById('roomName');
-            if (rn) rn.addEventListener('input', e => { state.selectedItem.name = e.target.value; draw(); });
+            if (rn) {
+                rn.addEventListener('input', e => { 
+                    state.selectedItem.name = e.target.value;
+                    requestAnimationFrame(() => draw());
+                });
+                rn.addEventListener('focus', e => e.target.select());
+            }
             const rp = document.getElementById('roomPurpose');
-            if (rp) rp.addEventListener('input', e => { state.selectedItem.purpose = e.target.value; draw(); });
+            if (rp) {
+                rp.addEventListener('input', e => { 
+                    state.selectedItem.purpose = e.target.value;
+                    requestAnimationFrame(() => draw());
+                });
+                rp.addEventListener('focus', e => e.target.select());
+            }
             const rc = document.getElementById('roomColor');
             if (rc) rc.addEventListener('input', e => { state.selectedItem.color = e.target.value; draw(); });
             const iw = document.getElementById('itemWidth');
@@ -1053,8 +1116,9 @@ function updateUI() {
                 draw();
             });
         }, 0);
-    } else {
+    } else if (!state.selectedItem) {
         document.getElementById('selectedPanel').style.display = 'none';
+        document.getElementById('selectedPanel').dataset.selectedId = '';
     }
 }
 
