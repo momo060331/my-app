@@ -33,6 +33,12 @@
         .total-area-display button {
             background: #4caf50 !important;
         }
+        #furnitureList button {
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
         /* モバイル対応 */
         @media (max-width: 768px) {
             body { flex-direction: column; }
@@ -128,6 +134,20 @@
             <button class="info-btn" id="resetPan" style="margin-top:4px;">🎯 表示リセット</button>
         </div>
         
+        <div class="section">
+            <div class="section-title">家具・設備</div>
+            <select id="furnitureCategory">
+                <option value="kitchen">キッチン</option>
+                <option value="bath">浴室</option>
+                <option value="furniture">家具</option>
+                <option value="appliance">家電</option>
+            </select>
+            <div id="furnitureList" style="max-height: 200px; overflow-y: auto; margin-top: 8px;">
+                <!-- 家具リストがここに表示される -->
+            </div>
+            <button class="action-btn" id="addCustomFurniture" style="margin-top: 8px;">📦 カスタム家具作成</button>
+        </div>
+
         <div class="section">
             <div class="section-title">基本設定</div>
             <label>壁の厚さ (cm)</label>
@@ -256,6 +276,103 @@ function findNearestEdge(x, y, threshold = 20) {
     });
     
     return nearest;
+}
+
+// 家具・設備ライブラリ
+const furnitureLibrary = {
+    kitchen: [
+        { name: 'I型キッチン', width: 255, depth: 65, color: '#f5f5dc', icon: '🍳' },
+        { name: 'L型キッチン', width: 255, depth: 180, color: '#f5f5dc', icon: '🍳', isL: true },
+        { name: 'アイランドキッチン', width: 180, depth: 90, color: '#e0e0e0', icon: '🏝️' },
+        { name: 'システムキッチン', width: 165, depth: 65, color: '#fff8dc', icon: '🍴' },
+        { name: '冷蔵庫', width: 60, depth: 70, color: '#d3d3d3', icon: '🧊' },
+    ],
+    bath: [
+        { name: 'ユニットバス1216', width: 120, depth: 160, color: '#e6f3ff', icon: '🛁' },
+        { name: 'ユニットバス1616', width: 160, depth: 160, color: '#e6f3ff', icon: '🛁' },
+        { name: 'ユニットバス1620', width: 160, depth: 200, color: '#e6f3ff', icon: '🛁' },
+        { name: '洗面台', width: 75, depth: 60, color: '#ffffff', icon: '🚰' },
+        { name: 'トイレ', width: 80, depth: 120, color: '#f0f8ff', icon: '🚽' },
+        { name: '洗濯機', width: 60, depth: 60, color: '#f5f5f5', icon: '🧺' },
+    ],
+    furniture: [
+        { name: 'シングルベッド', width: 100, depth: 200, color: '#ffefd5', icon: '🛏️' },
+        { name: 'ダブルベッド', width: 140, depth: 200, color: '#ffefd5', icon: '🛏️' },
+        { name: 'ソファ2人掛け', width: 150, depth: 80, color: '#dda0dd', icon: '🛋️' },
+        { name: 'ソファ3人掛け', width: 200, depth: 80, color: '#dda0dd', icon: '🛋️' },
+        { name: 'ダイニングテーブル4人', width: 120, depth: 80, color: '#deb887', icon: '🪑' },
+        { name: 'ダイニングテーブル6人', width: 180, depth: 90, color: '#deb887', icon: '🪑' },
+        { name: 'デスク', width: 120, depth: 60, color: '#d2b48c', icon: '📝' },
+        { name: 'クローゼット', width: 90, depth: 60, color: '#f4a460', icon: '👔' },
+    ],
+    appliance: [
+        { name: 'テレビ台', width: 120, depth: 40, color: '#696969', icon: '📺' },
+        { name: 'エアコン室内機', width: 80, depth: 30, color: '#ffffff', icon: '❄️' },
+    ]
+};
+
+// 家具リストを表示
+function displayFurnitureList(category) {
+    const listDiv = document.getElementById('furnitureList');
+    const items = furnitureLibrary[category] || [];
+    
+    listDiv.innerHTML = items.map((item, idx) => `
+        <button class="tool-btn" style="text-align: left; padding: 8px; margin-bottom: 4px;" 
+                onclick="addFurniture('${category}', ${idx})">
+            ${item.icon} ${item.name} (${item.width}×${item.depth}cm)
+        </button>
+    `).join('');
+}
+
+// 家具を追加
+function addFurniture(category, index) {
+    const item = furnitureLibrary[category][index];
+    const scale = state.scale;
+    
+    // キャンバス中央付近に配置
+    const centerX = (canvas.width / state.zoomLevel - state.panOffset.x / state.zoomLevel) / 2;
+    const centerY = (canvas.height / state.zoomLevel - state.panOffset.y / state.zoomLevel) / 2;
+    
+    const w = item.width * scale / 100;
+    const d = item.depth * scale / 100;
+    
+    let vertices;
+    if (item.isL) {
+        // L型キッチン用の頂点
+        vertices = [
+            { x: centerX, y: centerY },
+            { x: centerX + w, y: centerY },
+            { x: centerX + w, y: centerY + scale * 0.65 },
+            { x: centerX + scale * 0.65, y: centerY + scale * 0.65 },
+            { x: centerX + scale * 0.65, y: centerY + d },
+            { x: centerX, y: centerY + d }
+        ];
+    } else {
+        // 通常の四角形
+        vertices = [
+            { x: centerX, y: centerY },
+            { x: centerX + w, y: centerY },
+            { x: centerX + w, y: centerY + d },
+            { x: centerX, y: centerY + d }
+        ];
+    }
+    
+    const newRoom = {
+        id: Date.now(),
+        type: 'room',
+        vertices: vertices.map(v => snapPointToGrid(v)),
+        name: item.name,
+        purpose: category === 'kitchen' ? 'キッチン' : 
+                category === 'bath' ? '水回り' : 
+                category === 'furniture' ? '家具' : '設備',
+        color: item.color
+    };
+    
+    state.rooms.push(newRoom);
+    state.selectedItem = newRoom;
+    saveHistory();
+    switchToSelectTool();
+    draw();
 }
 
 // 自動保存機能
@@ -1145,7 +1262,12 @@ function updateUI() {
                 rp.addEventListener('focus', e => e.target.select());
             }
             const rc = document.getElementById('roomColor');
-            if (rc) rc.addEventListener('input', e => { state.selectedItem.color = e.target.value; draw(); });
+            if (rc) rc.addEventListener('input', e => { 
+                state.selectedItem.color = e.target.value;
+                const room = state.rooms.find(r => r.id === state.selectedItem.id);
+                if (room) room.color = e.target.value;
+                draw(); 
+            });
             const iw = document.getElementById('itemWidth');
             if (iw) iw.addEventListener('input', e => { state.selectedItem.width = e.target.value * state.scale / 100; draw(); });
             const wl = document.getElementById('wallLength');
@@ -2054,11 +2176,13 @@ document.getElementById('rotateBtn').addEventListener('click', () => {
             const dx = v.x - c.x, dy = v.y - c.y;
             return { x: c.x - dy, y: c.y + dx };
         });
+        saveHistory();
+        draw();
     } else if (state.selectedItem.rotation !== undefined) {
         state.selectedItem.rotation = (state.selectedItem.rotation + 90) % 360;
+        saveHistory();
+        draw();
     }
-    saveHistory();
-    draw();
 });
 
 //deleteBtn（削除ボタン）
@@ -2250,6 +2374,34 @@ canvas.addEventListener('touchmove', e => {
 // 元に戻す・やり直しボタン
 document.getElementById('undoBtn').addEventListener('click', undo);
 document.getElementById('redoBtn').addEventListener('click', redo);
+
+// 家具カテゴリ変更
+document.getElementById('furnitureCategory').addEventListener('change', e => {
+    displayFurnitureList(e.target.value);
+});
+
+// カスタム家具作成
+document.getElementById('addCustomFurniture').addEventListener('click', () => {
+    const name = prompt('家具名を入力してください:', '新しい家具');
+    if (!name) return;
+    
+    const width = parseFloat(prompt('幅を入力してください (cm):', '100'));
+    const depth = parseFloat(prompt('奥行きを入力してください (cm):', '60'));
+    
+    if (!width || !depth) return;
+    
+    const item = { name, width, depth, color: '#e0e0e0', icon: '📦' };
+    const category = document.getElementById('furnitureCategory').value;
+    
+    furnitureLibrary[category].push(item);
+    displayFurnitureList(category);
+    
+    // すぐに追加
+    addFurniture(category, furnitureLibrary[category].length - 1);
+});
+
+// 初期表示
+displayFurnitureList('kitchen');
 
 document.addEventListener('keydown', e => {
     if (e.key === 'Delete' && state.selectedItem) document.getElementById('deleteBtn').click();
