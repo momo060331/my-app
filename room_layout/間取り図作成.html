@@ -412,6 +412,7 @@ function saveHistory() {
         state.historyIndex--;
     }
     updateUndoRedoButtons();
+    autoSave(); // 履歴保存時に自動保存も実行
 }
 
 function undo() {
@@ -2115,7 +2116,7 @@ canvas.addEventListener('mouseup', () => {
             }
             draw();
         }
-        saveHistory();
+        saveHistory(); // saveHistory内でautoSave()が呼ばれる
     }
     state.isDragging = false;
     state.isRotating = false;
@@ -2418,6 +2419,26 @@ document.addEventListener('keydown', e => {
 // 初期履歴を保存
 saveHistory();
 draw();
+
+// ページ離脱時・バックグラウンド移行時の自動保存
+window.addEventListener('beforeunload', () => {
+    autoSave();
+});
+
+window.addEventListener('pagehide', () => {
+    autoSave();
+});
+
+window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        autoSave();
+    }
+});
+
+// 定期的な自動保存（30秒ごと）
+setInterval(() => {
+    autoSave();
+}, 30000);
     </script>
 </body>
 </html>
