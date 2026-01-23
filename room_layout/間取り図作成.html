@@ -110,7 +110,18 @@
                 <button class="tool-btn" data-tool="dimension">📏 寸法</button>
             </div>
             <button class="tool-btn" data-tool="multi-select">🔲 複数選択</button>
+                        <!-- 複数選択時のクイックアクション -->
+            <div id="multiSelectQuickActions" style="display:none; margin-top: 8px;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">選択中: <span id="selectedCountQuick">0</span>個</div>
+                <div class="btn-group">
+                    <button class="action-btn" id="unionBtnQuick" style="font-size: 12px; padding: 6px;">➕ 合成</button>
+                    <button class="info-btn" id="subtractBtnQuick" style="font-size: 12px; padding: 6px;">➖ 減算</button>
+                </div>
+                <button class="danger-btn" id="clearSelectionBtnQuick" style="font-size: 12px; padding: 6px; margin-top: 4px;">❌ 選択解除</button>
+            </div>
             <div class="hint">💡 削除: 連続クリックで削除<br>💡 壁追加: 頂点2つクリック<br>💡 複数選択: 部屋を順番にクリック<br>💡 パン: 右クリック or Ctrl+クリック</div>
+            
+
             </div>
 
             <div class="section">
@@ -169,19 +180,6 @@
             </div>
         </div>
 
-        <!-- 複数選択用のボタンセクション -->
-        <div id="multiSelectPanel" style="display:none;">
-            <div class="section">
-                <div class="section-title">複数選択中 (<span id="selectedCount">0</span>個)</div>
-                <div class="btn-group">
-                    <button class="action-btn" id="unionBtn">➕ 合成</button>
-                    <button class="info-btn" id="subtractBtn">➖ 減算</button>
-                </div>
-                <button class="danger-btn" id="clearSelectionBtn">❌ 選択解除</button>
-                <div class="hint">💡 合成: 全部屋を1つに結合<br>💡 減算: 最初の部屋から残りを引く</div>
-            </div>
-        </div>
-
         <div class="section">
             <div class="section-title">面積情報</div>
             <div class="info-box">
@@ -202,6 +200,9 @@
         <canvas id="canvas" width="1400" height="1000"></canvas>
     </div>
     <input type="file" id="fileInput" style="display:none;" accept=".json">
+
+    <!-- Martinez Polygon Clipping Library 外部ライブラリ追加 -->
+    <script src="https://cdn.jsdelivr.net/npm/martinez-polygon-clipping@0.7.2/dist/martinez.min.js"></script>
 
     <script>
 const canvas = document.getElementById('canvas');
@@ -659,37 +660,100 @@ function convexHull(points) {
     return lower.concat(upper);
 }
 
-// ポリゴン合成
+// ポリゴン合成(Martinez使用)
 function unionPolygons(rooms) {
-    const allPoints = [];
-    rooms.forEach(room => {
-        room.vertices.forEach(v => allPoints.push({x: v.x, y: v.y}));
+    if (rooms.length === 0) return null;
+    
+    // 各部屋のポリゴンをMartinez形式に変換
+    const polygons = rooms.map(room => {
+        const coords = room.vertices.map(v => [v.x, v.y]);
+        coords.push(coords[0]); // 閉じたポリゴンにする
+        return [coords];
     });
     
-    const hull = convexHull(allPoints);
-    
-    return {
-        id: Date.now(),
-        type: 'room',
-        vertices: hull,
-        name: rooms.map(r => r.name).join('+'),
-        purpose: '合成部屋',
-        color: rooms[0].color || '#e3f2fd'
-    };
+    try {
+        // 最初のポリゴンから順に合成
+        let result = polygons[0];
+        for (let i = 1; i < polygons.length; i++) {
+            result = martinez.union(result, polygons[i]);
+        }
+        
+        // 結果が空の場合
+        if (!result || result.length === 0) {
+            alert('合成できませんでした（部屋が重なっていません）');
+            return null;
+        }
+        
+        // Martinez形式から頂点配列に変換（最も大きいポリゴンを使用）
+        const largestPolygon = result.reduce((max, poly) => {
+            return poly[0].length > max[0].length ? poly : max;
+        }, result[0]);
+        
+        const vertices = largestPolygon[0].slice(0, -1).map(coord => ({
+            x: coord[0],
+            y: coord[1]
+        }));
+        
+        return {
+            id: Date.now(),
+            type: 'room',
+            vertices: vertices,
+            name: rooms.map(r => r.name).join('+'),
+            purpose: '合成部屋',
+            color: rooms[0].color || '#e3f2fd'
+        };
+    } catch (error) {
+        console.error('合成エラー:', error);
+        alert('合成に失敗しました');
+        return null;
+    }
 }
 
-// ポリゴン減算（簡易版）
-function subtractPolygon(baseRoom, subtractRoom) {
-    const result = {
-        id: Date.now(),
-        type: 'room',
-        vertices: [...baseRoom.vertices],
-        name: baseRoom.name + ' (減算後)',
-        purpose: baseRoom.purpose,
-        color: baseRoom.color
-    };
+// ポリゴン減算（Martinez使用）
+function subtractPolygons(baseRoom, subtractRooms) {
+    // ベース部屋のポリゴンをMartinez形式に変換
+    const baseCoords = baseRoom.vertices.map(v => [v.x, v.y]);
+    baseCoords.push(baseCoords[0]); // 閉じる
+    let result = [baseCoords];
     
-    return result;
+    try {
+        // 各減算部屋を順に引いていく
+        for (let subtractRoom of subtractRooms) {
+            const subtractCoords = subtractRoom.vertices.map(v => [v.x, v.y]);
+            subtractCoords.push(subtractCoords[0]); // 閉じる
+            
+            result = martinez.diff(result, [subtractCoords]);
+            
+            // 結果が空になった場合は終了
+            if (!result || result.length === 0) {
+                alert('減算の結果、部屋がなくなりました');
+                return null;
+            }
+        }
+        
+        // Martinez形式から頂点配列に変換（最も大きいポリゴンを使用）
+        const largestPolygon = result.reduce((max, poly) => {
+            return poly[0].length > max[0].length ? poly : max;
+        }, result[0]);
+        
+        const vertices = largestPolygon[0].slice(0, -1).map(coord => ({
+            x: coord[0],
+            y: coord[1]
+        }));
+        
+        return {
+            id: Date.now(),
+            type: 'room',
+            vertices: vertices,
+            name: baseRoom.name + ' (減算後)',
+            purpose: baseRoom.purpose,
+            color: baseRoom.color
+        };
+    } catch (error) {
+        console.error('減算エラー:', error);
+        alert('減算に失敗しました');
+        return null;
+    }
 }
 
 // 寸法線の実際の座標を取得（参照先の現在位置を反映）
@@ -1406,13 +1470,13 @@ function updateUI() {
     document.getElementById('roomCount').textContent = state.rooms.length;
     document.getElementById('scaleDisplay').textContent = Math.round(state.zoomLevel * 100);
 
-    // 複数選択パネルの表示/非表示
-    const multiPanel = document.getElementById('multiSelectPanel');
+    // 複数選択クイックアクションの表示/非表示
+    const multiQuickActions = document.getElementById('multiSelectQuickActions');
     if (state.selectedTool === 'multi-select' && state.multiSelectedRooms.length > 0) {
-        multiPanel.style.display = 'block';
-        document.getElementById('selectedCount').textContent = state.multiSelectedRooms.length;
+        multiQuickActions.style.display = 'block';
+        document.getElementById('selectedCountQuick').textContent = state.multiSelectedRooms.length;
     } else {
-        multiPanel.style.display = 'none';
+        multiQuickActions.style.display = 'none';
     }
 
     // 選択パネルのHTML再生成を避けるため、選択アイテムのIDをチェック
@@ -2657,8 +2721,8 @@ document.getElementById('addCustomFurniture').addEventListener('click', () => {
 // 初期表示
 displayFurnitureList('kitchen');
 
-// 複数選択関連のイベントリスナー
-document.getElementById('unionBtn').addEventListener('click', () => {
+// 合成ボタンの処理を関数化
+function handleUnion() {
     if (state.multiSelectedRooms.length < 2) {
         alert('2つ以上の部屋を選択してください');
         return;
@@ -2667,19 +2731,20 @@ document.getElementById('unionBtn').addEventListener('click', () => {
     const selectedRooms = state.rooms.filter(r => state.multiSelectedRooms.includes(r.id));
     const newRoom = unionPolygons(selectedRooms);
     
-    // 選択された部屋を削除
-    state.rooms = state.rooms.filter(r => !state.multiSelectedRooms.includes(r.id));
-    // 選択された部屋の寸法線も削除
-    state.dimensions = state.dimensions.filter(dim => !state.multiSelectedRooms.includes(dim.roomId));
-    state.rooms.push(newRoom);
-    
-    state.multiSelectedRooms = [];
-    state.selectedItem = newRoom;
-    saveHistory();
-    draw();
-});
+    if (newRoom) {
+        state.rooms = state.rooms.filter(r => !state.multiSelectedRooms.includes(r.id));
+        state.dimensions = state.dimensions.filter(dim => !state.multiSelectedRooms.includes(dim.roomId));
+        state.rooms.push(newRoom);
+        
+        state.multiSelectedRooms = [];
+        state.selectedItem = newRoom;
+        saveHistory();
+        draw();
+    }
+}
 
-document.getElementById('subtractBtn').addEventListener('click', () => {
+// 減算ボタンの処理を関数化
+function handleSubtract() {
     if (state.multiSelectedRooms.length < 2) {
         alert('2つ以上の部屋を選択してください（最初が基準、残りを引きます）');
         return;
@@ -2688,33 +2753,30 @@ document.getElementById('subtractBtn').addEventListener('click', () => {
     const baseRoom = state.rooms.find(r => r.id === state.multiSelectedRooms[0]);
     const subtractRooms = state.rooms.filter(r => state.multiSelectedRooms.slice(1).includes(r.id));
     
-    let result = {
-        id: Date.now(),
-        type: 'room',
-        vertices: [...baseRoom.vertices],
-        name: baseRoom.name + ' (減算後)',
-        purpose: baseRoom.purpose,
-        color: baseRoom.color
-    };
+    const result = subtractPolygons(baseRoom, subtractRooms);
     
-    result.id = Date.now();
-    result.name = baseRoom.name + ' (減算後)';
-    
-    state.rooms = state.rooms.filter(r => !state.multiSelectedRooms.includes(r.id));
-    // 選択された部屋の寸法線も削除
-    state.dimensions = state.dimensions.filter(dim => !state.multiSelectedRooms.includes(dim.roomId));
-    state.rooms.push(result);
-    
-    state.multiSelectedRooms = [];
-    state.selectedItem = result;
-    saveHistory();
-    draw();
-});
+    if (result) {
+        state.rooms = state.rooms.filter(r => !state.multiSelectedRooms.includes(r.id));
+        state.dimensions = state.dimensions.filter(dim => !state.multiSelectedRooms.includes(dim.roomId));
+        state.rooms.push(result);
+        
+        state.multiSelectedRooms = [];
+        state.selectedItem = result;
+        saveHistory();
+        draw();
+    }
+}
 
-document.getElementById('clearSelectionBtn').addEventListener('click', () => {
+// 選択解除の処理を関数化
+function handleClearSelection() {
     state.multiSelectedRooms = [];
     draw();
-});
+}
+
+// クイックアクションボタンのイベントリスナー
+document.getElementById('unionBtnQuick').addEventListener('click', handleUnion);
+document.getElementById('subtractBtnQuick').addEventListener('click', handleSubtract);
+document.getElementById('clearSelectionBtnQuick').addEventListener('click', handleClearSelection);
 
 document.addEventListener('keydown', e => {
     if (e.key === 'Delete' && state.selectedItem) document.getElementById('deleteBtn').click();
