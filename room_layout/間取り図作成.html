@@ -109,11 +109,12 @@
                 <button class="tool-btn" data-tool="manikin">🚶 人型</button>
                 <button class="tool-btn" data-tool="dimension">📏 寸法</button>
             </div>
+            <button class="tool-btn" data-tool="multi-select">🔲 複数選択</button>
             <div class="hint">💡 削除: 連続クリックで削除<br>💡 壁追加: 頂点2つクリック<br>💡 パン: 右クリック or Ctrl+クリック</div>
-        </div>
+            </div>
 
-        <div class="section">
-            <div class="section-title">敷地設定</div>
+            <div class="section">
+                <div class="section-title">敷地設定</div>
             <label>敷地の幅 (m)</label>
             <input type="number" id="landWidth" value="10.1" min="5" max="100" step="0.1">
             <label>敷地の奥行き (m)</label>
@@ -168,6 +169,19 @@
             </div>
         </div>
 
+        <!-- 複数選択用のボタンセクション -->
+        <div id="multiSelectPanel" style="display:none;">
+            <div class="section">
+                <div class="section-title">複数選択中 (<span id="selectedCount">0</span>個)</div>
+                <div class="btn-group">
+                    <button class="action-btn" id="unionBtn">➕ 合成</button>
+                    <button class="info-btn" id="subtractBtn">➖ 減算</button>
+                </div>
+                <button class="danger-btn" id="clearSelectionBtn">❌ 選択解除</button>
+                <div class="hint">💡 複数の部屋を選択して合成または減算できます</div>
+            </div>
+        </div>
+
         <div class="section">
             <div class="section-title">面積情報</div>
             <div class="info-box">
@@ -219,6 +233,7 @@ const savedData = loadFromStorage();
 
 let state = {
     rooms: savedData?.rooms || [],
+    multiSelectedRooms: [],
     walls: savedData?.walls || [],
     doors: savedData?.doors || [],
     windows: savedData?.windows || [],
@@ -556,9 +571,13 @@ function calculatePolygonArea(vs) {
     }
     return Math.abs(a / 2);
 }
-function calculateTatamiFromArea(pa) { return ((pa / (state.scale * state.scale)) / 1.62).toFixed(1); }
+function calculateTatamiFromArea(pa) { 
+    // 1畳 = 910mm × 1820mm = 1.6562m²
+    return ((pa / (state.scale * state.scale)) / 1.6562).toFixed(1); 
+}
 function getTotalArea() {
-    return (state.rooms.reduce((s, r) => s + calculatePolygonArea(r.vertices) / (state.scale * state.scale), 0) / 1.62).toFixed(1);
+    // 1畳 = 910mm × 1820mm = 1.6562m²
+    return (state.rooms.reduce((s, r) => s + calculatePolygonArea(r.vertices) / (state.scale * state.scale), 0) / 1.6562).toFixed(1);
 }
 function getAllVertices() {
     const vs = [];
@@ -600,6 +619,78 @@ function distanceToSegment(px, py, x1, y1, x2, y2) {
     return Math.sqrt((px - nx) ** 2 + (py - ny) ** 2);
 }
 function getEdgeMidpoint(v1, v2) { return { x: (v1.x + v2.x) / 2, y: (v1.y + v2.y) / 2 }; }
+
+// 色の明るさ調整
+function adjustColorBrightness(color, factor) {
+    const hex = color.replace('#', '');
+    const r = Math.min(255, Math.floor(parseInt(hex.substr(0, 2), 16) * factor));
+    const g = Math.min(255, Math.floor(parseInt(hex.substr(2, 2), 16) * factor));
+    const b = Math.min(255, Math.floor(parseInt(hex.substr(4, 2), 16) * factor));
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+// 凸包計算（Graham Scan）
+function convexHull(points) {
+    if (points.length < 3) return points;
+    
+    points.sort((a, b) => a.x !== b.x ? a.x - b.x : a.y - b.y);
+    
+    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    
+    const lower = [];
+    for (let p of points) {
+        while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+            lower.pop();
+        }
+        lower.push(p);
+    }
+    
+    const upper = [];
+    for (let i = points.length - 1; i >= 0; i--) {
+        const p = points[i];
+        while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+            upper.pop();
+        }
+        upper.push(p);
+    }
+    
+    lower.pop();
+    upper.pop();
+    return lower.concat(upper);
+}
+
+// ポリゴン合成
+function unionPolygons(rooms) {
+    const allPoints = [];
+    rooms.forEach(room => {
+        room.vertices.forEach(v => allPoints.push({x: v.x, y: v.y}));
+    });
+    
+    const hull = convexHull(allPoints);
+    
+    return {
+        id: Date.now(),
+        type: 'room',
+        vertices: hull,
+        name: rooms.map(r => r.name).join('+'),
+        purpose: '合成部屋',
+        color: rooms[0].color || '#e3f2fd'
+    };
+}
+
+// ポリゴン減算（簡易版）
+function subtractPolygon(baseRoom, subtractRoom) {
+    const result = {
+        id: Date.now(),
+        type: 'room',
+        vertices: [...baseRoom.vertices],
+        name: baseRoom.name + ' (減算後)',
+        purpose: baseRoom.purpose,
+        color: baseRoom.color
+    };
+    
+    return result;
+}
 
 // 寸法線の実際の座標を取得（参照先の現在位置を反映）
 function getDimensionCoords(dim) {
@@ -658,6 +749,95 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 window.addEventListener('load', resizeCanvas);
 
+// 部屋に関連する寸法線の数を数える
+function countRoomDimensions(roomId) {
+    return state.dimensions.filter(dim => dim.roomId === roomId).length;
+}
+
+// 部屋の寸法線を自動追加/削除
+function toggleRoomDimensions(roomId) {
+    const room = state.rooms.find(r => r.id === roomId);
+    if (!room) return;
+    
+    const existingDimCount = countRoomDimensions(roomId);
+    
+    if (existingDimCount > 0) {
+        // 既に寸法線がある場合は削除
+        state.dimensions = state.dimensions.filter(dim => dim.roomId !== roomId);
+    } else {
+        // 寸法線を自動追加
+        const vertices = room.vertices;
+        
+        if (vertices.length === 4) {
+            // 四角形の場合: 上下と左右の内部寸法
+            // 横幅（上辺と下辺）
+            state.dimensions.push({
+                id: Date.now() + 1,
+                type: 'dimension',
+                start: { type: 'vertex', roomId: roomId, vertexIndex: 0 },
+                end: { type: 'vertex', roomId: roomId, vertexIndex: 1 },
+                offset: -30,
+                roomId: roomId
+            });
+            state.dimensions.push({
+                id: Date.now() + 2,
+                type: 'dimension',
+                start: { type: 'vertex', roomId: roomId, vertexIndex: 2 },
+                end: { type: 'vertex', roomId: roomId, vertexIndex: 3 },
+                offset: 30,
+                roomId: roomId
+            });
+            
+            // 縦幅（左辺と右辺）
+            state.dimensions.push({
+                id: Date.now() + 3,
+                type: 'dimension',
+                start: { type: 'vertex', roomId: roomId, vertexIndex: 0 },
+                end: { type: 'vertex', roomId: roomId, vertexIndex: 3 },
+                offset: -30,
+                roomId: roomId
+            });
+            state.dimensions.push({
+                id: Date.now() + 4,
+                type: 'dimension',
+                start: { type: 'vertex', roomId: roomId, vertexIndex: 1 },
+                end: { type: 'vertex', roomId: roomId, vertexIndex: 2 },
+                offset: 30,
+                roomId: roomId
+            });
+        } else if (vertices.length === 6) {
+            // L型またはその他6角形: 全ての辺に寸法線
+            for (let i = 0; i < vertices.length; i++) {
+                const j = (i + 1) % vertices.length;
+                state.dimensions.push({
+                    id: Date.now() + i + 1,
+                    type: 'dimension',
+                    start: { type: 'vertex', roomId: roomId, vertexIndex: i },
+                    end: { type: 'vertex', roomId: roomId, vertexIndex: j },
+                    offset: 30,
+                    roomId: roomId
+                });
+            }
+        } else {
+            // その他の形状: 全ての辺に寸法線を追加
+            for (let i = 0; i < vertices.length; i++) {
+                const j = (i + 1) % vertices.length;
+                state.dimensions.push({
+                    id: Date.now() + i + 1,
+                    type: 'dimension',
+                    start: { type: 'vertex', roomId: roomId, vertexIndex: i },
+                    end: { type: 'vertex', roomId: roomId, vertexIndex: j },
+                    offset: 30,
+                    roomId: roomId
+                });
+            }
+        }
+    }
+    
+    saveHistory();
+    draw();
+}
+
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
@@ -700,25 +880,34 @@ function draw() {
         );
     }
 
-    state.rooms.forEach(r => {
-        const sel = state.selectedItem?.id === r.id;
+state.rooms.forEach(r => {
+    const sel = state.selectedItem?.id === r.id;
+    const multiSel = state.multiSelectedRooms.includes(r.id);
+    
+    // 塗りつぶし色の設定
+    if (multiSel) {
+        ctx.fillStyle = adjustColorBrightness(r.color || '#e3f2fd', 1.2);
+    } else {
         ctx.fillStyle = r.color || '#e3f2fd';
-        ctx.beginPath();
-        ctx.moveTo(r.vertices[0].x, r.vertices[0].y);
-        for (let i = 1; i < r.vertices.length; i++) ctx.lineTo(r.vertices[i].x, r.vertices[i].y);
-        ctx.closePath();
-        ctx.fill();
-        
-        ctx.strokeStyle = sel ? '#2196f3' : '#666';
-        ctx.lineWidth = (sel ? 3 : 1) / state.zoomLevel;
-        ctx.stroke();
+    }
+    
+    ctx.beginPath();
+    ctx.moveTo(r.vertices[0].x, r.vertices[0].y);
+    for (let i = 1; i < r.vertices.length; i++) ctx.lineTo(r.vertices[i].x, r.vertices[i].y);
+    ctx.closePath();
+    ctx.fill();
+    
+    // 枠線の設定
+    ctx.strokeStyle = sel ? '#2196f3' : (multiSel ? '#4caf50' : '#666');
+    ctx.lineWidth = (sel || multiSel ? 3 : 1) / state.zoomLevel;
+    ctx.stroke();
 
-        r.vertices.forEach((v, idx) => {
-            const sv = state.selectedVertex?.roomId === r.id && state.selectedVertex?.index === idx;
-            ctx.fillStyle = sv ? '#f44336' : '#2196f3';
-            const h = 8 / state.zoomLevel;
-            ctx.fillRect(v.x - h/2, v.y - h/2, h, h);
-        });
+    r.vertices.forEach((v, idx) => {
+        const sv = state.selectedVertex?.roomId === r.id && state.selectedVertex?.index === idx;
+        ctx.fillStyle = sv ? '#f44336' : '#2196f3';
+        const h = 8 / state.zoomLevel;
+        ctx.fillRect(v.x - h/2, v.y - h/2, h, h);
+    });
 
         if ((state.selectedTool === 'add-vertex' || state.selectedTool === 'edit-edge') && sel) {
             for (let i = 0; i < r.vertices.length; i++) {
@@ -1217,6 +1406,15 @@ function updateUI() {
     document.getElementById('roomCount').textContent = state.rooms.length;
     document.getElementById('scaleDisplay').textContent = Math.round(state.zoomLevel * 100);
 
+    // 複数選択パネルの表示/非表示
+    const multiPanel = document.getElementById('multiSelectPanel');
+    if (state.selectedTool === 'multi-select' && state.multiSelectedRooms.length > 0) {
+        multiPanel.style.display = 'block';
+        document.getElementById('selectedCount').textContent = state.multiSelectedRooms.length;
+    } else {
+        multiPanel.style.display = 'none';
+    }
+
     // 選択パネルのHTML再生成を避けるため、選択アイテムのIDをチェック
     const currentSelectedId = document.getElementById('selectedPanel').dataset.selectedId;
     const newSelectedId = state.selectedItem ? state.selectedItem.id : null;
@@ -1229,9 +1427,11 @@ function updateUI() {
 
         let c = '';
         if (state.selectedItem.type === 'room') {
+            const dimCount = countRoomDimensions(state.selectedItem.id);
             c = `<label>部屋名</label><input type="text" id="roomName" value="${state.selectedItem.name || ''}" placeholder="例: リビング">
-<label>用途</label><input type="text" id="roomPurpose" value="${state.selectedItem.purpose || ''}" placeholder="例: 居間">
-<label>色</label><input type="color" id="roomColor" class="color-picker" value="${state.selectedItem.color || '#e3f2fd'}">`;
+        <label>用途</label><input type="text" id="roomPurpose" value="${state.selectedItem.purpose || ''}" placeholder="例: 居間">
+        <label>色</label><input type="color" id="roomColor" class="color-picker" value="${state.selectedItem.color || '#e3f2fd'}">
+        <button class="info-btn" id="toggleRoomDimensions" style="margin-top:10px;">📏 寸法 (${dimCount})</button>`;
         } else if (state.selectedItem.type === 'door') {
             c = `<label>ドア幅 (cm)</label><input type="number" id="itemWidth" value="${Math.round(state.selectedItem.width / state.scale * 100)}" min="60" max="120" step="5">`;
         } else if (state.selectedItem.type === 'window') {
@@ -1289,6 +1489,11 @@ function updateUI() {
             if (dimOffset) dimOffset.addEventListener('input', e => { 
                 state.selectedItem.offset = parseFloat(e.target.value);
                 draw();
+            });
+            
+            const toggleDimBtn = document.getElementById('toggleRoomDimensions');
+            if (toggleDimBtn) toggleDimBtn.addEventListener('click', () => {
+                toggleRoomDimensions(state.selectedItem.id);
             });
         }, 0);
     } else if (!state.selectedItem) {
@@ -1472,6 +1677,27 @@ canvas.addEventListener('mousedown', e => {
     const rect = canvas.getBoundingClientRect();
     const x = ((e.clientX - rect.left) - state.panOffset.x) / state.zoomLevel;
     const y = ((e.clientY - rect.top) - state.panOffset.y) / state.zoomLevel;
+
+    // 複数選択モード
+    if (state.selectedTool === 'multi-select') {
+        const f = findItemAt(x, y);
+        if (f && f.type === 'room') {
+            if (e.ctrlKey || e.metaKey) {
+                // Ctrl+クリックで追加/削除
+                const idx = state.multiSelectedRooms.indexOf(f.id);
+                if (idx >= 0) {
+                    state.multiSelectedRooms.splice(idx, 1);
+                } else {
+                    state.multiSelectedRooms.push(f.id);
+                }
+            } else {
+                // 通常クリックで単一選択
+                state.multiSelectedRooms = [f.id];
+            }
+            draw();
+        }
+        return;
+    }
     
     // 右クリックまたはCtrl+クリックでパン開始
     if (e.button === 2 || e.ctrlKey) {
@@ -1486,7 +1712,11 @@ canvas.addEventListener('mousedown', e => {
 
     // 削除ツールの処理
     if (state.selectedTool === 'delete' && f) {
-        if (f.type === 'room') state.rooms = state.rooms.filter(r => r.id !== f.id);
+        if (f.type === 'room') {
+            state.rooms = state.rooms.filter(r => r.id !== f.id);
+            // 部屋に関連する寸法線も削除
+            state.dimensions = state.dimensions.filter(dim => dim.roomId !== f.id);
+        }
         else if (f.type === 'wall') state.walls = state.walls.filter(w => w.id !== f.id);
         else if (f.type === 'door') state.doors = state.doors.filter(d => d.id !== f.id);
         else if (f.type === 'window') state.windows = state.windows.filter(w => w.id !== f.id);
@@ -1670,13 +1900,23 @@ if (state.tempDimensionEnd) {
             }
         }
             
+        // 寸法線が部屋の頂点/辺を参照している場合、roomIdを記録
+        let dimensionRoomId = null;
+        if (state.dimensionStart.type === 'vertex' || state.dimensionStart.type === 'edge') {
+            dimensionRoomId = state.dimensionStart.roomId;
+        } else if (ref.type === 'vertex' || ref.type === 'edge') {
+            dimensionRoomId = ref.roomId;
+        }
+        
         state.dimensions.push({
             id: Date.now(),
             type: 'dimension',
             start: state.dimensionStart,
             end: ref,
-            offset: autoOffset
+            offset: autoOffset,
+            roomId: dimensionRoomId
         });
+
         state.dimensionStart = null;
         state.tempDimensionEnd = null;
         saveHistory();
@@ -1917,69 +2157,77 @@ if (!f) {
                 w.x2 = tp.x; w.y2 = tp.y;
             }
             draw();
-            } else if (state.selectedVertex && state.selectedVertex.roomId && state.selectedTool === 'select') {
-                const r = state.rooms.find(rm => rm.id === state.selectedVertex.roomId);
-                if (r && e.shiftKey && r.vertices.length === 4) {
-                    // Shift押下時: 対角の点を固定して正方形を保ちながらリサイズ
-                    const idx = state.selectedVertex.index;
-                    const oppositeIdx = (idx + 2) % 4; // 対角の点
-                    const fixedPoint = r.vertices[oppositeIdx];
-                    
-                    // 新しい位置をスナップ
-                    const newPos = snapPointToGrid({ x, y });
-                    
-                    // 固定点から新しい位置までの距離
-                    const dx = newPos.x - fixedPoint.x;
-                    const dy = newPos.y - fixedPoint.y;
-                    const size = Math.max(Math.abs(dx), Math.abs(dy));
-                    
-                    // 符号を保持
-                    const signX = dx >= 0 ? 1 : -1;
-                    const signY = dy >= 0 ? 1 : -1;
-                    
-                    // 4点を正方形に配置（対角点は固定）
-                    r.vertices[oppositeIdx] = fixedPoint; // 対角点は固定
-                    r.vertices[idx] = { x: fixedPoint.x + signX * size, y: fixedPoint.y + signY * size }; // ドラッグ中の点
-                    r.vertices[(idx + 1) % 4] = { x: fixedPoint.x + signX * size, y: fixedPoint.y }; // 隣接点1
-                    r.vertices[(idx + 3) % 4] = { x: fixedPoint.x, y: fixedPoint.y + signY * size }; // 隣接点2
-                    
-                    state.selectedItem = r;
-                    } else if (r && r.vertices.length === 4) {
-                            // Shiftなし: 対角の点を固定して四角形を保ちながら長方形に変形
-                            const idx = state.selectedVertex.index;
-                            const oppositeIdx = (idx + 2) % 4; // 対角の点
-                            const fixedPoint = r.vertices[oppositeIdx];
-                            
-                            // 新しい位置をスナップ
-                            const newPos = snapPointToGrid({ x, y });
-                            
-                            // 固定点から新しい位置までの距離（X, Yは独立）
-                            const dx = newPos.x - fixedPoint.x;
-                            const dy = newPos.y - fixedPoint.y;
-                            
-                            // 新しい4点の座標を計算（長方形）
-                            const newVertices = [
-                                { x: fixedPoint.x, y: fixedPoint.y },
-                                { x: fixedPoint.x + dx, y: fixedPoint.y },
-                                { x: fixedPoint.x + dx, y: fixedPoint.y + dy },
-                                { x: fixedPoint.x, y: fixedPoint.y + dy }
-                            ];
-                            
-                            // oppositeIdxが0になるように回転
-                            const rotatedVertices = [];
-                            for (let i = 0; i < 4; i++) {
-                                rotatedVertices[i] = newVertices[(i + oppositeIdx) % 4];
-                            }
-                            
-                            r.vertices = rotatedVertices;
-                            state.selectedItem = r;
-                        } else if (r) {
-                            // 4角形以外の場合は点だけ動かす
-                            r.vertices[state.selectedVertex.index] = snapPointToGrid({ x, y });
-                            state.selectedItem = r;
-                        }
-                draw();
-            } else if (state.selectedVertex && state.selectedVertex.roomId) {
+        } else if (state.selectedVertex && state.selectedVertex.roomId && state.selectedTool === 'select') {
+            const r = state.rooms.find(rm => rm.id === state.selectedVertex.roomId);
+            if (r && e.shiftKey && r.vertices.length === 4) {
+                // Shift押下時: 対角の点を固定して正方形を保ちながらリサイズ
+                const idx = state.selectedVertex.index;
+                const oppositeIdx = (idx + 2) % 4; // 対角の点
+                const fixedPoint = r.vertices[oppositeIdx];
+                
+                // 新しい位置をスナップ
+                const newPos = snapPointToGrid({ x, y });
+                
+                // 固定点から新しい位置までの距離
+                const dx = newPos.x - fixedPoint.x;
+                const dy = newPos.y - fixedPoint.y;
+                const size = Math.max(Math.abs(dx), Math.abs(dy));
+                
+                // 最小サイズ制限（20ピクセル = 約40cm）
+                const minSize = 20;
+                if (size < minSize) return;
+                
+                // 符号を保持
+                const signX = dx >= 0 ? 1 : -1;
+                const signY = dy >= 0 ? 1 : -1;
+                
+                // 4点を正方形に配置（対角点は固定）
+                r.vertices[oppositeIdx] = fixedPoint; // 対角点は固定
+                r.vertices[idx] = { x: fixedPoint.x + signX * size, y: fixedPoint.y + signY * size }; // ドラッグ中の点
+                r.vertices[(idx + 1) % 4] = { x: fixedPoint.x + signX * size, y: fixedPoint.y }; // 隣接点1
+                r.vertices[(idx + 3) % 4] = { x: fixedPoint.x, y: fixedPoint.y + signY * size }; // 隣接点2
+                
+                state.selectedItem = r;
+            } else if (r && r.vertices.length === 4) {
+                // Shiftなし: 対角の点を固定して四角形を保ちながら長方形に変形
+                const idx = state.selectedVertex.index;
+                const oppositeIdx = (idx + 2) % 4; // 対角の点
+                const fixedPoint = r.vertices[oppositeIdx];
+                
+                // 新しい位置をスナップ
+                const newPos = snapPointToGrid({ x, y });
+                
+                // 固定点から新しい位置までの距離（X, Yは独立）
+                const dx = newPos.x - fixedPoint.x;
+                const dy = newPos.y - fixedPoint.y;
+                
+                // 最小サイズ制限（20ピクセル = 約40cm）
+                const minSize = 20;
+                if (Math.abs(dx) < minSize || Math.abs(dy) < minSize) return;
+                
+                // 新しい4点の座標を計算（長方形）
+                const newVertices = [
+                    { x: fixedPoint.x, y: fixedPoint.y },
+                    { x: fixedPoint.x + dx, y: fixedPoint.y },
+                    { x: fixedPoint.x + dx, y: fixedPoint.y + dy },
+                    { x: fixedPoint.x, y: fixedPoint.y + dy }
+                ];
+                
+                // oppositeIdxが0になるように回転
+                const rotatedVertices = [];
+                for (let i = 0; i < 4; i++) {
+                    rotatedVertices[i] = newVertices[(i + oppositeIdx) % 4];
+                }
+                
+                r.vertices = rotatedVertices;
+                state.selectedItem = r;
+            } else if (r) {
+                // 4角形以外の場合は点だけ動かす
+                r.vertices[state.selectedVertex.index] = snapPointToGrid({ x, y });
+                state.selectedItem = r;
+            }
+            draw();
+        } else if (state.selectedVertex && state.selectedVertex.roomId) {
                 // edit-vertexモード時は従来通り
                 const r = state.rooms.find(rm => rm.id === state.selectedVertex.roomId);
                 if (r) {
@@ -2147,6 +2395,11 @@ document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
         state.tempDimensionEnd = null;
         state.polygonVertices = [];
         state.tempPolygonPos = null;
+
+        if (state.selectedTool !== 'multi-select') {
+            state.multiSelectedRooms = [];
+        }
+
         canvas.style.cursor = state.selectedTool === 'add-vertex' ? 'crosshair' : 'default';
         draw();
     });
@@ -2189,7 +2442,11 @@ document.getElementById('rotateBtn').addEventListener('click', () => {
 //deleteBtn（削除ボタン）
 document.getElementById('deleteBtn').addEventListener('click', () => {
     if (!state.selectedItem) return;
-    if (state.selectedItem.type === 'room') state.rooms = state.rooms.filter(r => r.id !== state.selectedItem.id);
+    if (state.selectedItem.type === 'room') {
+        state.rooms = state.rooms.filter(r => r.id !== state.selectedItem.id);
+        // 部屋に関連する寸法線も削除
+        state.dimensions = state.dimensions.filter(dim => dim.roomId !== state.selectedItem.id);
+    }
     else if (state.selectedItem.type === 'wall') state.walls = state.walls.filter(w => w.id !== state.selectedItem.id);
     else if (state.selectedItem.type === 'door') state.doors = state.doors.filter(d => d.id !== state.selectedItem.id);
     else if (state.selectedItem.type === 'window') state.windows = state.windows.filter(w => w.id !== state.selectedItem.id);
@@ -2403,6 +2660,65 @@ document.getElementById('addCustomFurniture').addEventListener('click', () => {
 
 // 初期表示
 displayFurnitureList('kitchen');
+
+// 複数選択関連のイベントリスナー
+document.getElementById('unionBtn').addEventListener('click', () => {
+    if (state.multiSelectedRooms.length < 2) {
+        alert('2つ以上の部屋を選択してください');
+        return;
+    }
+    
+    const selectedRooms = state.rooms.filter(r => state.multiSelectedRooms.includes(r.id));
+    const newRoom = unionPolygons(selectedRooms);
+    
+    // 選択された部屋を削除
+    state.rooms = state.rooms.filter(r => !state.multiSelectedRooms.includes(r.id));
+    // 選択された部屋の寸法線も削除
+    state.dimensions = state.dimensions.filter(dim => !state.multiSelectedRooms.includes(dim.roomId));
+    state.rooms.push(newRoom);
+    
+    state.multiSelectedRooms = [];
+    state.selectedItem = newRoom;
+    saveHistory();
+    draw();
+});
+
+document.getElementById('subtractBtn').addEventListener('click', () => {
+    if (state.multiSelectedRooms.length < 2) {
+        alert('2つ以上の部屋を選択してください（最初が基準、残りを引きます）');
+        return;
+    }
+    
+    const baseRoom = state.rooms.find(r => r.id === state.multiSelectedRooms[0]);
+    const subtractRooms = state.rooms.filter(r => state.multiSelectedRooms.slice(1).includes(r.id));
+    
+    let result = {
+        id: Date.now(),
+        type: 'room',
+        vertices: [...baseRoom.vertices],
+        name: baseRoom.name + ' (減算後)',
+        purpose: baseRoom.purpose,
+        color: baseRoom.color
+    };
+    
+    result.id = Date.now();
+    result.name = baseRoom.name + ' (減算後)';
+    
+    state.rooms = state.rooms.filter(r => !state.multiSelectedRooms.includes(r.id));
+    // 選択された部屋の寸法線も削除
+    state.dimensions = state.dimensions.filter(dim => !state.multiSelectedRooms.includes(dim.roomId));
+    state.rooms.push(result);
+    
+    state.multiSelectedRooms = [];
+    state.selectedItem = result;
+    saveHistory();
+    draw();
+});
+
+document.getElementById('clearSelectionBtn').addEventListener('click', () => {
+    state.multiSelectedRooms = [];
+    draw();
+});
 
 document.addEventListener('keydown', e => {
     if (e.key === 'Delete' && state.selectedItem) document.getElementById('deleteBtn').click();
