@@ -908,15 +908,39 @@ function draw() {
     ctx.translate(state.panOffset.x, state.panOffset.y);
     ctx.scale(state.zoomLevel, state.zoomLevel);
 
+    //グリッド描画
     if (state.showGrid) {
         ctx.strokeStyle = '#e0e0e0';
         ctx.lineWidth = 0.5 / state.zoomLevel;
         const g = state.gridSize * 0.2;
-        for (let x = 0; x < canvas.width / state.zoomLevel; x += g) {
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height / state.zoomLevel); ctx.stroke();
-        }
-        for (let y = 0; y < canvas.height / state.zoomLevel; y += g) {
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width / state.zoomLevel, y); ctx.stroke();
+        
+        // 敷地範囲が設定されている場合はその範囲のみにグリッドを表示
+        if (state.landBoundary) {
+            const startX = state.landBoundary.x;
+            const endX = state.landBoundary.x + state.landBoundary.width;
+            const startY = state.landBoundary.y;
+            const endY = state.landBoundary.y + state.landBoundary.height;
+            
+            for (let x = startX; x <= endX; x += g) {
+                ctx.beginPath();
+                ctx.moveTo(x, startY);
+                ctx.lineTo(x, endY);
+                ctx.stroke();
+            }
+            for (let y = startY; y <= endY; y += g) {
+                ctx.beginPath();
+                ctx.moveTo(startX, y);
+                ctx.lineTo(endX, y);
+                ctx.stroke();
+            }
+        } else {
+            // 敷地範囲が未設定の場合はキャンバス全体にグリッド表示
+            for (let x = 0; x < canvas.width / state.zoomLevel; x += g) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height / state.zoomLevel); ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height / state.zoomLevel; y += g) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width / state.zoomLevel, y); ctx.stroke();
+            }
         }
     }
 
@@ -2554,11 +2578,47 @@ document.getElementById('fileInput').addEventListener('change', e => {
     r.readAsText(f);
 });
 
+//画像エクスポート機能 画像保存: 敷地範囲が設定されている場合、その範囲のみが画像として保存されます
 document.getElementById('exportBtn').addEventListener('click', () => {
-    const a = document.createElement('a');
-    a.download = '間取り_' + new Date().toISOString().slice(0, 10) + '.png';
-    a.href = canvas.toDataURL();
-    a.click();
+    if (state.landBoundary) {
+        // 敷地範囲が設定されている場合、その範囲のみを画像として保存
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        // 敷地範囲のサイズに合わせてキャンバスを作成
+        const exportWidth = state.landBoundary.width * state.zoomLevel;
+        const exportHeight = state.landBoundary.height * state.zoomLevel;
+        tempCanvas.width = exportWidth;
+        tempCanvas.height = exportHeight;
+        
+        // 白背景を描画
+        tempCtx.fillStyle = 'white';
+        tempCtx.fillRect(0, 0, exportWidth, exportHeight);
+        
+        // 敷地範囲の部分をコピー
+        tempCtx.drawImage(
+            canvas,
+            state.landBoundary.x * state.zoomLevel + state.panOffset.x,
+            state.landBoundary.y * state.zoomLevel + state.panOffset.y,
+            exportWidth,
+            exportHeight,
+            0,
+            0,
+            exportWidth,
+            exportHeight
+        );
+        
+        const a = document.createElement('a');
+        a.download = '間取り_' + new Date().toISOString().slice(0, 10) + '.png';
+        a.href = tempCanvas.toDataURL();
+        a.click();
+    } else {
+        // 敷地範囲が未設定の場合はキャンバス全体を保存
+        const a = document.createElement('a');
+        a.download = '間取り_' + new Date().toISOString().slice(0, 10) + '.png';
+        a.href = canvas.toDataURL();
+        a.click();
+    }
 });
 
 document.getElementById('setLandBtn').addEventListener('click', () => {
