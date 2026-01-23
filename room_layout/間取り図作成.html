@@ -110,7 +110,7 @@
                 <button class="tool-btn" data-tool="dimension">📏 寸法</button>
             </div>
             <button class="tool-btn" data-tool="multi-select">🔲 複数選択</button>
-            <div class="hint">💡 削除: 連続クリックで削除<br>💡 壁追加: 頂点2つクリック<br>💡 パン: 右クリック or Ctrl+クリック</div>
+            <div class="hint">💡 削除: 連続クリックで削除<br>💡 壁追加: 頂点2つクリック<br>💡 複数選択: 部屋を順番にクリック<br>💡 パン: 右クリック or Ctrl+クリック</div>
             </div>
 
             <div class="section">
@@ -178,7 +178,7 @@
                     <button class="info-btn" id="subtractBtn">➖ 減算</button>
                 </div>
                 <button class="danger-btn" id="clearSelectionBtn">❌ 選択解除</button>
-                <div class="hint">💡 複数の部屋を選択して合成または減算できます</div>
+                <div class="hint">💡 合成: 全部屋を1つに結合<br>💡 減算: 最初の部屋から残りを引く</div>
             </div>
         </div>
 
@@ -1678,26 +1678,22 @@ canvas.addEventListener('mousedown', e => {
     const x = ((e.clientX - rect.left) - state.panOffset.x) / state.zoomLevel;
     const y = ((e.clientY - rect.top) - state.panOffset.y) / state.zoomLevel;
 
-    // 複数選択モード
-    if (state.selectedTool === 'multi-select') {
-        const f = findItemAt(x, y);
-        if (f && f.type === 'room') {
-            if (e.ctrlKey || e.metaKey) {
-                // Ctrl+クリックで追加/削除
-                const idx = state.multiSelectedRooms.indexOf(f.id);
-                if (idx >= 0) {
-                    state.multiSelectedRooms.splice(idx, 1);
-                } else {
-                    state.multiSelectedRooms.push(f.id);
-                }
-            } else {
-                // 通常クリックで単一選択
-                state.multiSelectedRooms = [f.id];
-            }
-            draw();
+// 複数選択モード
+if (state.selectedTool === 'multi-select') {
+    const f = findItemAt(x, y);
+    if (f && f.type === 'room') {
+        const idx = state.multiSelectedRooms.indexOf(f.id);
+        if (idx >= 0) {
+            // 既に選択されている場合は解除
+            state.multiSelectedRooms.splice(idx, 1);
+        } else {
+            // 選択されていない場合は追加
+            state.multiSelectedRooms.push(f.id);
         }
-        return;
+        draw();
     }
+    return;
+}
     
     // 右クリックまたはCtrl+クリックでパン開始
     if (e.button === 2 || e.ctrlKey) {
