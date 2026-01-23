@@ -119,7 +119,7 @@
                 </div>
                 <button class="danger-btn" id="clearSelectionBtnQuick" style="font-size: 12px; padding: 6px; margin-top: 4px;">❌ 選択解除</button>
             </div>
-            <div class="hint">💡 削除: 連続クリックで削除<br>💡 壁追加: 頂点2つクリック<br>💡 複数選択: 部屋を順番にクリック<br>💡 パン: 右クリック or Ctrl+クリック</div>
+            <div class="hint">💡 削除: 連続クリックで削除<br>💡 壁追加: 頂点2つクリック<br>💡 複数選択: 部屋を順番にクリック<br>💡 パン: 右クリック or Ctrl+クリック<br>💡 多角形: 右クリック or 同じ点2回で取消</div>
             
 
             </div>
@@ -658,6 +658,25 @@ function convexHull(points) {
     lower.pop();
     upper.pop();
     return lower.concat(upper);
+}
+
+// 3点から長方形を作成する関数
+function convertTriangleToRectangle(vertices) {
+    if (vertices.length !== 3) return vertices;
+    
+    // 3点のバウンディングボックスを計算
+    const minX = Math.min(vertices[0].x, vertices[1].x, vertices[2].x);
+    const maxX = Math.max(vertices[0].x, vertices[1].x, vertices[2].x);
+    const minY = Math.min(vertices[0].y, vertices[1].y, vertices[2].y);
+    const maxY = Math.max(vertices[0].y, vertices[1].y, vertices[2].y);
+    
+    // 長方形の4点を返す
+    return [
+        { x: minX, y: minY },
+        { x: maxX, y: minY },
+        { x: maxX, y: maxY },
+        { x: minX, y: maxY }
+    ];
 }
 
 // ポリゴン合成(Martinez使用)
@@ -1388,7 +1407,8 @@ state.rooms.forEach(r => {
         ctx.textAlign = 'center';
         ctx.fillText(formatLength(length), (p1.x + p2.x) / 2, (p1.y + p2.y) / 2 - 10 / state.zoomLevel);
     }
-        // 多角形作成中のプレビュー
+
+    // 多角形作成中のプレビュー
     if (state.selectedTool === 'polygon' && state.polygonVertices.length > 0) {
         ctx.strokeStyle = '#ff9800';
         ctx.fillStyle = 'rgba(255, 152, 0, 0.1)';
@@ -1417,11 +1437,27 @@ state.rooms.forEach(r => {
             ctx.fillRect(v.x - h/2, v.y - h/2, h, h);
         });
         
-        // 完了可能な場合の表示
+        // スナップ中の既存頂点をハイライト
+        if (state.tempPolygonPos) {
+            const nearestVertex = findNearestVertex(state.tempPolygonPos.x, state.tempPolygonPos.y, 20);
+            if (nearestVertex) {
+                ctx.strokeStyle = '#4caf50';
+                ctx.lineWidth = 3 / state.zoomLevel;
+                ctx.beginPath();
+                ctx.arc(nearestVertex.x, nearestVertex.y, 12 / state.zoomLevel, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+        
+       // 完了可能な場合の表示
         if (state.polygonVertices.length >= 3 && state.tempPolygonPos) {
             const firstV = state.polygonVertices[0];
-            const dist = Math.sqrt((state.tempPolygonPos.x - firstV.x) ** 2 + (state.tempPolygonPos.y - firstV.y) ** 2);
-            if (dist < 15 / state.zoomLevel) {
+            const distToFirst = Math.sqrt((state.tempPolygonPos.x - firstV.x) ** 2 + (state.tempPolygonPos.y - firstV.y) ** 2);
+            const isInsidePolygon = isPointInPolygon(state.tempPolygonPos, state.polygonVertices);
+            
+            // 最初の点に近いか、内部にある場合
+            if (distToFirst < 15 / state.zoomLevel) {
+                // 最初の点に近い場合
                 ctx.fillStyle = '#4caf50';
                 ctx.beginPath();
                 ctx.arc(firstV.x, firstV.y, 12 / state.zoomLevel, 0, Math.PI * 2);
@@ -1431,7 +1467,40 @@ state.rooms.forEach(r => {
                 ctx.font = `bold ${10 / state.zoomLevel}px sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText('完了', firstV.x, firstV.y);
+                const text = state.polygonVertices.length === 3 ? '□' : '完了';
+                ctx.fillText(text, firstV.x, firstV.y);
+            } else if (isInsidePolygon) {
+                // 内部をクリック可能な場合
+                const center = getPolygonCenter(state.polygonVertices);
+                ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
+                ctx.beginPath();
+                ctx.arc(center.x, center.y, 20 / state.zoomLevel, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#4caf50';
+                ctx.font = `bold ${12 / state.zoomLevel}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const text = state.polygonVertices.length === 3 ? '□確定' : '✓確定';
+                ctx.fillText(text, center.x, center.y);
+            }
+        }
+        
+        // 最後の点を再度クリックでキャンセル可能を表示
+        if (state.polygonVertices.length > 0 && state.tempPolygonPos) {
+            const lastV = state.polygonVertices[state.polygonVertices.length - 1];
+            const distToLast = Math.sqrt((state.tempPolygonPos.x - lastV.x) ** 2 + (state.tempPolygonPos.y - lastV.y) ** 2);
+            if (distToLast < 5 / state.zoomLevel) {
+                ctx.strokeStyle = '#f44336';
+                ctx.lineWidth = 3 / state.zoomLevel;
+                ctx.beginPath();
+                ctx.arc(lastV.x, lastV.y, 10 / state.zoomLevel, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                ctx.fillStyle = '#f44336';
+                ctx.font = `bold ${8 / state.zoomLevel}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.fillText('取消', lastV.x, lastV.y - 15 / state.zoomLevel);
             }
         }
     }
@@ -1761,7 +1830,18 @@ canvas.addEventListener('wheel', e => {
 }, { passive: false });
 
 canvas.addEventListener('mousedown', e => {
-    console.log('mousedown:', state.selectedTool, 'isPanning:', state.isPanning, 'zoomLevel:', state.zoomLevel);  // ← 追加
+    // 多角形作成中の右クリックで最後の点を削除
+    if (state.selectedTool === 'polygon' && state.polygonVertices.length > 0 && e.button === 2) {
+        e.preventDefault();
+        state.polygonVertices.pop(); // 最後の点を削除
+        if (state.polygonVertices.length === 0) {
+            state.tempPolygonPos = null;
+        }
+        draw();
+        return;
+    }
+    
+    console.log('mousedown:', state.selectedTool, 'isPanning:', state.isPanning, 'zoomLevel:', state.zoomLevel);
     const rect = canvas.getBoundingClientRect();
     const x = ((e.clientX - rect.left) - state.panOffset.x) / state.zoomLevel;
     const y = ((e.clientY - rect.top) - state.panOffset.y) / state.zoomLevel;
@@ -2099,14 +2179,49 @@ if (!f) {
             switchToSelectTool();            
         } else if (state.selectedTool === 'polygon') {
             // 多角形作成モード
+            // 既存の頂点を優先的に検索
+            const nearestVertex = findNearestVertex(x, y, 20);
+            const pointToAdd = nearestVertex || snapPointToGrid({ x, y });
+            
+            // 最後に追加した点と同じ場所をクリックした場合はキャンセル
+            if (state.polygonVertices.length > 0) {
+                const lastV = state.polygonVertices[state.polygonVertices.length - 1];
+                const distToLast = Math.sqrt((pointToAdd.x - lastV.x) ** 2 + (pointToAdd.y - lastV.y) ** 2);
+                if (distToLast < 5 / state.zoomLevel) {
+                    // 同じ点をクリック = 最後の点を削除
+                    state.polygonVertices.pop();
+                    if (state.polygonVertices.length === 0) {
+                        state.tempPolygonPos = null;
+                    }
+                    draw();
+                    return;
+                }
+            }
+            
             if (state.polygonVertices.length >= 3) {
                 const firstV = state.polygonVertices[0];
-                const dist = Math.sqrt((sx - firstV.x) ** 2 + (sy - firstV.y) ** 2);
-                if (dist < 15 / state.zoomLevel) {
-                    // 最初の頂点に近い場合は完了
+                const dist = Math.sqrt((pointToAdd.x - firstV.x) ** 2 + (pointToAdd.y - firstV.y) ** 2);
+                
+                // 最初の頂点に近い場合、または多角形の内部をクリックした場合は完了
+                const isNearFirst = dist < 15 / state.zoomLevel;
+                const isInsidePolygon = state.polygonVertices.length >= 3 && 
+                                       isPointInPolygon(pointToAdd, state.polygonVertices);
+                
+                if (isNearFirst || isInsidePolygon) {
+                    // 完了処理
+                    let finalVertices = [...state.polygonVertices];
+                    
+                    // 3点の場合は長方形に変換
+                    if (finalVertices.length === 3) {
+                        finalVertices = convertTriangleToRectangle(finalVertices);
+                    } else if (finalVertices.length >= 4) {
+                        // 4点以上の場合は凸包を計算して整列
+                        finalVertices = convexHull([...finalVertices]);
+                    }
+                    
                     const newRoom = {
                         id: Date.now(), type: 'room',
-                        vertices: [...state.polygonVertices],
+                        vertices: finalVertices,
                         name: '部屋' + (state.rooms.length + 1), purpose: '', color: '#e3f2fd'
                     };
                     state.rooms.push(newRoom);
@@ -2119,9 +2234,9 @@ if (!f) {
                 }
             }
             // 新しい頂点を追加
-            state.polygonVertices.push({ x: sx, y: sy });
+            state.polygonVertices.push(pointToAdd);
             draw();
-        } else if (state.selectedTool === 'door-swing' || state.selectedTool === 'door-sliding') {
+        }else if (state.selectedTool === 'door-swing' || state.selectedTool === 'door-sliding') {
             const edge = findNearestEdge(x, y, 30);
             if (edge) {
                 state.doors.push({ 
@@ -2215,7 +2330,9 @@ if (!f) {
 
     // 多角形作成中のプレビュー
     if (state.selectedTool === 'polygon' && state.polygonVertices.length > 0) {
-        state.tempPolygonPos = { x, y };
+        // 既存の頂点にスナップ
+        const nearestVertex = findNearestVertex(x, y, 20);
+        state.tempPolygonPos = nearestVertex || { x, y };
         draw();
         return;
     }
