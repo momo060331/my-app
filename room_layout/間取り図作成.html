@@ -2845,8 +2845,8 @@ document.getElementById('exportBtn').addEventListener('click', () => {
         const originalPanOffset = { ...state.panOffset };
         const originalZoomLevel = state.zoomLevel;
         
-        // エクスポート用に描画状態を調整
-        state.panOffset = { x: margin, y: margin };
+        // エクスポート用に描画状態を調整（敷地範囲の左上を原点に）
+        state.panOffset = { x: margin - state.landBoundary.x, y: margin - state.landBoundary.y };
         state.zoomLevel = 1.0;
         
         // 一時キャンバスに描画
@@ -2857,17 +2857,11 @@ document.getElementById('exportBtn').addEventListener('click', () => {
         window.canvas = tempCanvas;
         window.ctx = tempCtx;
         
-        // 敷地範囲を中心に描画
-        tempCtx.save();
-        tempCtx.translate(margin - state.landBoundary.x, margin - state.landBoundary.y);
-        
         // 描画関数を呼び出し（グリッドなしで）
         const originalShowGrid = state.showGrid;
         state.showGrid = false;
         draw();
         state.showGrid = originalShowGrid;
-        
-        tempCtx.restore();
         
         // 元に戻す
         window.canvas = originalCanvas;
