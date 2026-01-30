@@ -969,6 +969,7 @@ function draw() {
 
     // 敷地範囲の描画
     if (state.landBoundary) {
+        console.log('敷地範囲を描画:', state.landBoundary);  // ← デバッグ追加
         ctx.strokeStyle = '#ff5722';
         ctx.lineWidth = 3 / state.zoomLevel;
         ctx.setLineDash([10 / state.zoomLevel, 5 / state.zoomLevel]);
@@ -2825,82 +2826,412 @@ document.getElementById('fileInput').addEventListener('change', e => {
 
 //画像エクスポート機能 画像保存: 敷地範囲が設定されている場合、その範囲のみが画像として保存されます
 document.getElementById('exportBtn').addEventListener('click', () => {
+    console.log('画像エクスポート開始');
+    console.log('敷地範囲:', state.landBoundary);
+    
+    // エクスポート範囲を計算（すべての要素を含む）
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    // 敷地範囲を含める
     if (state.landBoundary) {
-        // 敷地範囲が設定されている場合、その範囲のみを画像として保存
-        const tempCanvas = document.createElement('canvas');
-        const tempCtx = tempCanvas.getContext('2d');
-        
-        // 敷地範囲のサイズに合わせてキャンバスを作成（余白を追加）
-        const margin = 50;
-        const exportWidth = state.landBoundary.width + margin * 2;
-        const exportHeight = state.landBoundary.height + margin * 2;
-        tempCanvas.width = exportWidth;
-        tempCanvas.height = exportHeight;
-        
-        // 白背景を描画
-        tempCtx.fillStyle = 'white';
-        tempCtx.fillRect(0, 0, exportWidth, exportHeight);
-        
-        // 一時的に描画状態を保存
-        const originalPanOffset = { ...state.panOffset };
-        const originalZoomLevel = state.zoomLevel;
-        
-        // エクスポート用に描画状態を調整（敷地範囲の左上を原点に）
-        state.panOffset = { x: margin - state.landBoundary.x, y: margin - state.landBoundary.y };
-        state.zoomLevel = 1.0;
-        
-        // 一時キャンバスに描画
-        const originalCanvas = canvas;
-        const originalCtx = ctx;
-        
-        // グローバルなcanvasとctxを一時的に置き換え
-        window.canvas = tempCanvas;
-        window.ctx = tempCtx;
-        
-        // 描画関数を呼び出し（グリッドなしで）
-        const originalShowGrid = state.showGrid;
-        state.showGrid = false;
-        draw();
-        state.showGrid = originalShowGrid;
-        
-        // 元に戻す
-        window.canvas = originalCanvas;
-        window.ctx = originalCtx;
-        state.panOffset = originalPanOffset;
-        state.zoomLevel = originalZoomLevel;
-        draw();
-        
-        const a = document.createElement('a');
-        a.download = '間取り_' + new Date().toISOString().slice(0, 10) + '.png';
-        a.href = tempCanvas.toDataURL();
-        a.click();
-    } else {
-        // 敷地範囲が未設定の場合はキャンバス全体を保存
-        const a = document.createElement('a');
-        a.download = '間取り_' + new Date().toISOString().slice(0, 10) + '.png';
-        a.href = canvas.toDataURL();
-        a.click();
+        minX = Math.min(minX, state.landBoundary.x);
+        minY = Math.min(minY, state.landBoundary.y);
+        maxX = Math.max(maxX, state.landBoundary.x + state.landBoundary.width);
+        maxY = Math.max(maxY, state.landBoundary.y + state.landBoundary.height);
     }
+    
+    // 部屋
+    state.rooms.forEach(r => {
+        r.vertices.forEach(v => {
+            minX = Math.min(minX, v.x);
+            minY = Math.min(minY, v.y);
+            maxX = Math.max(maxX, v.x);
+            maxY = Math.max(maxY, v.y);
+        });
+    });
+    
+    // 壁
+    state.walls.forEach(w => {
+        minX = Math.min(minX, w.x1, w.x2);
+        minY = Math.min(minY, w.y1, w.y2);
+        maxX = Math.max(maxX, w.x1, w.x2);
+        maxY = Math.max(maxY, w.y1, w.y2);
+    });
+    
+    // ドア（辺上の位置を計算）
+    state.doors.forEach(d => {
+        const room = state.rooms.find(r => r.id === d.roomId);
+        if (room && d.edgeIndex < room.vertices.length) {
+            const v1 = room.vertices[d.edgeIndex];
+            const v2 = room.vertices[(d.edgeIndex + 1) % room.vertices.length];
+            const x = v1.x + d.t * (v2.x - v1.x);
+            const y = v1.y + d.t * (v2.y - v1.y);
+            minX = Math.min(minX, x - d.width);
+            minY = Math.min(minY, y - d.width);
+            maxX = Math.max(maxX, x + d.width);
+            maxY = Math.max(maxY, y + d.width);
+        }
+    });
+    
+    // 窓（辺上の位置を計算）
+    state.windows.forEach(w => {
+        const room = state.rooms.find(r => r.id === w.roomId);
+        if (room && w.edgeIndex < room.vertices.length) {
+            const v1 = room.vertices[w.edgeIndex];
+            const v2 = room.vertices[(w.edgeIndex + 1) % room.vertices.length];
+            const x = v1.x + w.t * (v2.x - v1.x);
+            const y = v1.y + w.t * (v2.y - v1.y);
+            minX = Math.min(minX, x - w.width);
+            minY = Math.min(minY, y - 10);
+            maxX = Math.max(maxX, x + w.width);
+            maxY = Math.max(maxY, y + 10);
+        }
+    });
+    
+    // 人型
+    state.manikins.forEach(m => {
+        minX = Math.min(minX, m.x - 30);
+        minY = Math.min(minY, m.y - 30);
+        maxX = Math.max(maxX, m.x + 30);
+        maxY = Math.max(maxY, m.y + 30);
+    });
+    
+    // 寸法線（オフセットを考慮）
+    state.dimensions.forEach(dim => {
+        const coords = getDimensionCoords(dim);
+        if (coords) {
+            const { p1, p2 } = coords;
+            const offset = Math.abs(dim.offset || 30) + 50; // 余裕を持たせる
+            minX = Math.min(minX, p1.x - offset, p2.x - offset);
+            minY = Math.min(minY, p1.y - offset, p2.y - offset);
+            maxX = Math.max(maxX, p1.x + offset, p2.x + offset);
+            maxY = Math.max(maxY, p1.y + offset, p2.y + offset);
+        }
+    });
+    
+     // 何も描画されていない場合のデフォルト
+    const margin = 50;
+    let exportBounds;
+    if (minX === Infinity) {
+        alert('何も描画されていません');
+        return;
+    } else {
+        exportBounds = {
+            x: minX - margin,
+            y: minY - margin,
+            width: (maxX - minX) + margin * 2,
+            height: (maxY - minY) + margin * 2
+        };
+    }
+    
+    console.log('エクスポート範囲:', exportBounds);
+    console.log('部屋数:', state.rooms.length);
+    console.log('壁数:', state.walls.length);
+    
+// 一時キャンバスを作成
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    tempCanvas.width = exportBounds.width;
+    tempCanvas.height = exportBounds.height;
+    
+    // 白背景
+    tempCtx.fillStyle = 'white';
+    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+    
+    // 描画領域を調整
+    tempCtx.save();
+    tempCtx.translate(-exportBounds.x, -exportBounds.y);
+
+    // 敷地範囲の描画
+    if (state.landBoundary) {
+        tempCtx.strokeStyle = '#ff5722';
+        tempCtx.lineWidth = 3;
+        tempCtx.setLineDash([10, 5]);
+        tempCtx.strokeRect(
+            state.landBoundary.x,
+            state.landBoundary.y,
+            state.landBoundary.width,
+            state.landBoundary.height
+        );
+        tempCtx.setLineDash([]);
+        
+        tempCtx.fillStyle = '#ff5722';
+        tempCtx.font = 'bold 14px sans-serif';
+        tempCtx.textAlign = 'center';
+        tempCtx.fillText(
+            `${(state.landBoundary.width / state.scale).toFixed(1)}m × ${(state.landBoundary.height / state.scale).toFixed(1)}m`,
+            state.landBoundary.x + state.landBoundary.width / 2,
+            state.landBoundary.y - 10
+        );
+    }
+
+    // 部屋の描画
+    state.rooms.forEach(r => {
+        tempCtx.fillStyle = r.color || '#e3f2fd';
+        tempCtx.beginPath();
+        tempCtx.moveTo(r.vertices[0].x, r.vertices[0].y);
+        for (let i = 1; i < r.vertices.length; i++) tempCtx.lineTo(r.vertices[i].x, r.vertices[i].y);
+        tempCtx.closePath();
+        tempCtx.fill();
+        
+        tempCtx.strokeStyle = '#666';
+        tempCtx.lineWidth = 1;
+        tempCtx.stroke();
+
+        const c = getPolygonCenter(r.vertices);
+        tempCtx.fillStyle = '#333';
+        tempCtx.font = 'bold 16px sans-serif';
+        tempCtx.textAlign = 'center';
+        tempCtx.fillText(r.name || '部屋', c.x, c.y - 15);
+        tempCtx.font = '14px sans-serif';
+        tempCtx.fillText(calculateTatamiFromArea(calculatePolygonArea(r.vertices)) + '畳', c.x, c.y + 5);
+        if (r.purpose) {
+            tempCtx.font = '12px sans-serif';
+            tempCtx.fillStyle = '#666';
+            tempCtx.fillText(r.purpose, c.x, c.y + 22);
+        }
+    });
+
+    // 壁の描画
+    state.walls.forEach(w => {
+        tempCtx.strokeStyle = '#333';
+        tempCtx.lineWidth = w.thickness;
+        tempCtx.lineCap = 'square';
+        tempCtx.beginPath();
+        tempCtx.moveTo(w.x1, w.y1);
+        tempCtx.lineTo(w.x2, w.y2);
+        tempCtx.stroke();
+    });
+
+    // ドアの描画
+    state.doors.forEach(d => {
+        const room = state.rooms.find(r => r.id === d.roomId);
+        if (!room) return;
+        
+        const v1 = room.vertices[d.edgeIndex];
+        const v2 = room.vertices[(d.edgeIndex + 1) % room.vertices.length];
+        const dx = v2.x - v1.x;
+        const dy = v2.y - v1.y;
+        
+        const x = v1.x + d.t * dx;
+        const y = v1.y + d.t * dy;
+        const angle = Math.atan2(dy, dx);
+        
+        tempCtx.save();
+        tempCtx.translate(x, y);
+        tempCtx.rotate(angle);
+        
+        if (d.doorType === 'swing') {
+            tempCtx.strokeStyle = '#8b4513';
+            tempCtx.lineWidth = 4;
+            
+            if (d.flippedHorizontal) {
+                tempCtx.scale(-1, 1);
+                tempCtx.translate(-d.width, 0);
+            }
+            
+            tempCtx.beginPath();
+            tempCtx.moveTo(0, 0);
+            tempCtx.lineTo(d.width, 0);
+            tempCtx.stroke();
+            
+            tempCtx.strokeStyle = '#ccc';
+            tempCtx.lineWidth = 1;
+            tempCtx.beginPath();
+            if (d.flipped) {
+                tempCtx.arc(0, 0, d.width, -Math.PI/2, 0);
+            } else {
+                tempCtx.arc(0, 0, d.width, 0, Math.PI/2);
+            }
+            tempCtx.stroke();
+        } else {
+            tempCtx.strokeStyle = '#8b4513';
+            tempCtx.lineWidth = 4;
+            tempCtx.beginPath();
+            tempCtx.moveTo(0, -5);
+            tempCtx.lineTo(d.width/2, -5);
+            tempCtx.moveTo(d.width/2, 5);
+            tempCtx.lineTo(d.width, 5);
+            tempCtx.stroke();
+        }
+        tempCtx.restore();
+    });
+
+    // 窓の描画
+    state.windows.forEach(w => {
+        const room = state.rooms.find(r => r.id === w.roomId);
+        if (!room) return;
+        
+        const v1 = room.vertices[w.edgeIndex];
+        const v2 = room.vertices[(w.edgeIndex + 1) % room.vertices.length];
+        const dx = v2.x - v1.x;
+        const dy = v2.y - v1.y;
+        
+        const x = v1.x + w.t * dx;
+        const y = v1.y + w.t * dy;
+        const angle = Math.atan2(dy, dx);
+        
+        tempCtx.save();
+        tempCtx.translate(x, y);
+        tempCtx.rotate(angle);
+        tempCtx.strokeStyle = '#4fc3f7';
+        tempCtx.lineWidth = 5;
+        tempCtx.beginPath();
+        tempCtx.moveTo(0, 0);
+        tempCtx.lineTo(w.width, 0);
+        tempCtx.stroke();
+        tempCtx.strokeStyle = '#b3e5fc';
+        tempCtx.lineWidth = 2;
+        tempCtx.beginPath();
+        tempCtx.moveTo(w.width/2, -4);
+        tempCtx.lineTo(w.width/2, 4);
+        tempCtx.stroke();
+        tempCtx.restore();
+    });
+
+    // 人型の描画
+    state.manikins.forEach(m => {
+        tempCtx.save();
+        tempCtx.translate(m.x, m.y);
+        tempCtx.rotate((m.rotation * Math.PI) / 180);
+        const s = 20;
+        tempCtx.strokeStyle = '#ff5722';
+        tempCtx.fillStyle = '#ffccbc';
+        tempCtx.lineWidth = 2;
+        tempCtx.beginPath();
+        tempCtx.arc(0, -s, s/3, 0, Math.PI * 2);
+        tempCtx.fill();
+        tempCtx.stroke();
+        tempCtx.beginPath();
+        tempCtx.moveTo(0, -s * 0.7);
+        tempCtx.lineTo(0, s * 0.5);
+        tempCtx.stroke();
+        tempCtx.beginPath();
+        tempCtx.moveTo(-s/2, -s * 0.3);
+        tempCtx.lineTo(0, -s * 0.5);
+        tempCtx.lineTo(s/2, -s * 0.3);
+        tempCtx.stroke();
+        tempCtx.beginPath();
+        tempCtx.moveTo(0, s * 0.5);
+        tempCtx.lineTo(-s/3, s * 1.2);
+        tempCtx.moveTo(0, s * 0.5);
+        tempCtx.lineTo(s/3, s * 1.2);
+        tempCtx.stroke();
+        tempCtx.restore();
+    });
+
+    // 寸法線の描画
+    state.dimensions.forEach(dim => {
+        const coords = getDimensionCoords(dim);
+        if (!coords) return;
+        
+        const { p1, p2 } = coords;
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        
+        if (length < 0.1) return;
+        
+        const angle = Math.atan2(dy, dx);
+        const offsetDist = dim.offset || 30;
+        const nx = -dy / length;
+        const ny = dx / length;
+        
+        const ox1 = p1.x + nx * offsetDist;
+        const oy1 = p1.y + ny * offsetDist;
+        const ox2 = p2.x + nx * offsetDist;
+        const oy2 = p2.y + ny * offsetDist;
+        
+        tempCtx.strokeStyle = '#666';
+        tempCtx.lineWidth = 1;
+        
+        tempCtx.setLineDash([3, 3]);
+        tempCtx.beginPath();
+        tempCtx.moveTo(p1.x, p1.y);
+        tempCtx.lineTo(ox1, oy1);
+        tempCtx.stroke();
+        tempCtx.beginPath();
+        tempCtx.moveTo(p2.x, p2.y);
+        tempCtx.lineTo(ox2, oy2);
+        tempCtx.stroke();
+        tempCtx.setLineDash([]);
+        
+        tempCtx.lineWidth = 1.5;
+        tempCtx.beginPath();
+        tempCtx.moveTo(ox1, oy1);
+        tempCtx.lineTo(ox2, oy2);
+        tempCtx.stroke();
+        
+        const arrowSize = 6;
+        tempCtx.beginPath();
+        tempCtx.moveTo(ox1, oy1);
+        tempCtx.lineTo(ox1 + arrowSize * Math.cos(angle + Math.PI * 0.85), oy1 + arrowSize * Math.sin(angle + Math.PI * 0.85));
+        tempCtx.moveTo(ox1, oy1);
+        tempCtx.lineTo(ox1 + arrowSize * Math.cos(angle - Math.PI * 0.85), oy1 + arrowSize * Math.sin(angle - Math.PI * 0.85));
+        tempCtx.stroke();
+        
+        tempCtx.beginPath();
+        tempCtx.moveTo(ox2, oy2);
+        tempCtx.lineTo(ox2 - arrowSize * Math.cos(angle + Math.PI * 0.85), oy2 - arrowSize * Math.sin(angle + Math.PI * 0.85));
+        tempCtx.moveTo(ox2, oy2);
+        tempCtx.lineTo(ox2 - arrowSize * Math.cos(angle - Math.PI * 0.85), oy2 - arrowSize * Math.sin(angle - Math.PI * 0.85));
+        tempCtx.stroke();
+        
+        const mx = (ox1 + ox2) / 2;
+        const my = (oy1 + oy2) / 2;
+        
+        tempCtx.save();
+        tempCtx.translate(mx, my);
+        tempCtx.rotate(angle);
+        
+        const text = formatLength(length);
+        tempCtx.font = 'bold 12px sans-serif';
+        tempCtx.textAlign = 'center';
+        tempCtx.textBaseline = 'middle';
+        const metrics = tempCtx.measureText(text);
+        const padding = 3;
+        
+        tempCtx.fillStyle = 'white';
+        tempCtx.fillRect(-metrics.width / 2 - padding, -7, metrics.width + padding * 2, 14);
+        
+        tempCtx.fillStyle = '#333';
+        tempCtx.fillText(text, 0, 0);
+        
+        tempCtx.restore();
+    });
+    
+    tempCtx.restore();
+    
+    // ダウンロード
+    const a = document.createElement('a');
+    a.download = '間取り_' + new Date().toISOString().slice(0, 10) + '.png';
+    a.href = tempCanvas.toDataURL();
+    a.click();
 });
 
+// 敷地範囲設定ボタン
 document.getElementById('setLandBtn').addEventListener('click', () => {
     const width = parseFloat(document.getElementById('landWidth').value);
     const depth = parseFloat(document.getElementById('landDepth').value);
     
-    if (width && depth) {
-        const marginX = 50;
-        const marginY = 50;
+    if (width && depth && width > 0 && depth > 0) {
+        const margin = 50;
         state.landBoundary = {
-            x: marginX,
-            y: marginY,
+            x: margin,
+            y: margin,
             width: width * state.scale,
             height: depth * state.scale
         };
+        console.log('敷地範囲を設定:', state.landBoundary);
         saveHistory();
         draw();
+    } else {
+        alert('正しい数値を入力してください');
     }
 });
 
+// 敷地範囲消去ボタン
 document.getElementById('clearLandBtn').addEventListener('click', () => {
     state.landBoundary = null;
     saveHistory();
