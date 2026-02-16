@@ -3,17 +3,17 @@
   "short_name": "ツール一覧",
   "icons": [
     {
-      "src": "./assets/icons/shisakawara1.png",
+      "src": "/my-app/assets/icons/shisakawara1.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "./assets/icons/shisakawara1.png",
+      "src": "/my-app/assets/icons/shisakawara1.png",
       "sizes": "512x512",
       "type": "image/png"
     }
   ],
-  "start_url": "./",
+  "start_url": "/my-app/",
   "display": "standalone",
   "background_color": "#f7f7f7",
   "theme_color": "#f7f7f7"
