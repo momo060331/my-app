@@ -111,13 +111,18 @@
                 <button class="tool-btn" data-tool="dimension">📏 寸法</button>
             </div>
             <button class="tool-btn" data-tool="multi-select">🔲 複数選択</button>
-                        <!-- 複数選択時のクイックアクション -->
+            <!-- 複数選択時のクイックアクション -->
             <div id="multiSelectQuickActions" style="display:none; margin-top: 8px;">
                 <div style="font-size: 11px; color: #666; margin-bottom: 4px;">選択中: <span id="selectedCountQuick">0</span>個</div>
                 <div class="btn-group">
                     <button class="action-btn" id="unionBtnQuick" style="font-size: 12px; padding: 6px;">➕ 合成</button>
                     <button class="info-btn" id="subtractBtnQuick" style="font-size: 12px; padding: 6px;">➖ 減算</button>
                 </div>
+                <div class="btn-group">
+                    <button class="action-btn" id="groupBtnQuick" style="font-size: 12px; padding: 6px; background:#4caf50;">📦 グループ化</button>
+                    <button class="info-btn" id="ungroupBtnQuick" style="font-size: 12px; padding: 6px;">📂 解除</button>
+                </div>
+                <button class="info-btn" id="rotateMultiBtn" style="font-size: 12px; padding: 6px; margin-top: 4px; width: 100%;">🔄 90度回転</button>
                 <button class="danger-btn" id="clearSelectionBtnQuick" style="font-size: 12px; padding: 6px; margin-top: 4px;">❌ 選択解除</button>
             </div>
             <div class="hint">💡 削除: 連続クリックで削除<br>💡 壁追加: 頂点2つクリック<br>💡 複数選択: 部屋を順番にクリック<br>💡 画面移動: 🖐️移動ボタン or 右クリック<br>💡 多角形: 右クリック or 同じ点2回で取消</div>
@@ -219,6 +224,7 @@ function loadFromStorage() {
             const data = JSON.parse(saved);
             return {
                 rooms: data.rooms || [],
+                groups: data.groups || [],
                 walls: data.walls || [],
                 doors: data.doors || [],
                 windows: data.windows || [],
@@ -237,6 +243,7 @@ const savedData = loadFromStorage();
 
 let state = {
     rooms: savedData?.rooms || [],
+    groups: savedData?.groups || [],
     multiSelectedRooms: [],
     walls: savedData?.walls || [],
     doors: savedData?.doors || [],
@@ -311,6 +318,8 @@ const furnitureLibrary = {
         { name: '冷蔵庫', width: 60, depth: 70, color: '#d3d3d3', icon: '🧊' },
     ],
     bath: [
+        { name: 'トイレ(1畳)', width: 90, depth: 180, color: '#f0f8ff', icon: '🚽', isTemplate: true },
+        { name: '浴室(2畳)', width: 180, depth: 180, color: '#e6f3ff', icon: '🛁', isTemplate: true },
         { name: 'ユニットバス1216', width: 120, depth: 160, color: '#e6f3ff', icon: '🛁' },
         { name: 'ユニットバス1616', width: 160, depth: 160, color: '#e6f3ff', icon: '🛁' },
         { name: 'ユニットバス1620', width: 160, depth: 200, color: '#e6f3ff', icon: '🛁' },
@@ -400,6 +409,7 @@ function autoSave() {
     try {
         const data = {
             rooms: state.rooms,
+            groups: state.groups, 
             walls: state.walls,
             doors: state.doors,
             windows: state.windows,
@@ -417,6 +427,7 @@ function saveHistory() {
     state.history = state.history.slice(0, state.historyIndex + 1);
     const snapshot = {
         rooms: JSON.parse(JSON.stringify(state.rooms)),
+        groups: JSON.parse(JSON.stringify(state.groups)),
         walls: JSON.parse(JSON.stringify(state.walls)),
         doors: JSON.parse(JSON.stringify(state.doors)),
         windows: JSON.parse(JSON.stringify(state.windows)),
@@ -426,7 +437,7 @@ function saveHistory() {
     };
     state.history.push(snapshot);
     state.historyIndex++;
-    if (state.history.length > 20) {
+    if (state.history.length > 50) {
         state.history.shift();
         state.historyIndex--;
     }
@@ -439,6 +450,7 @@ function undo() {
         state.historyIndex--;
         const snapshot = state.history[state.historyIndex];
         state.rooms = JSON.parse(JSON.stringify(snapshot.rooms));
+        state.groups = JSON.parse(JSON.stringify(snapshot.groups));
         state.walls = JSON.parse(JSON.stringify(snapshot.walls));
         state.doors = JSON.parse(JSON.stringify(snapshot.doors));
         state.windows = JSON.parse(JSON.stringify(snapshot.windows));
@@ -458,6 +470,7 @@ function redo() {
         state.historyIndex++;
         const snapshot = state.history[state.historyIndex];
         state.rooms = JSON.parse(JSON.stringify(snapshot.rooms));
+        state.groups = JSON.parse(JSON.stringify(snapshot.groups));
         state.walls = JSON.parse(JSON.stringify(snapshot.walls));
         state.doors = JSON.parse(JSON.stringify(snapshot.doors));
         state.windows = JSON.parse(JSON.stringify(snapshot.windows));
@@ -1040,6 +1053,31 @@ state.rooms.forEach(r => {
         }
     });
 
+    // グループ枠線を描画
+    state.groups.forEach(g => {
+        const groupRooms = state.rooms.filter(r => g.roomIds.includes(r.id));
+        if (groupRooms.length === 0) return;
+        
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        groupRooms.forEach(r => r.vertices.forEach(v => {
+            minX = Math.min(minX, v.x); minY = Math.min(minY, v.y);
+            maxX = Math.max(maxX, v.x); maxY = Math.max(maxY, v.y);
+        }));
+        
+        const pad = 4 / state.zoomLevel;
+        ctx.strokeStyle = 'rgba(76, 175, 80, 0.6)';
+        ctx.lineWidth = 2 / state.zoomLevel;
+        ctx.setLineDash([6 / state.zoomLevel, 3 / state.zoomLevel]);
+        ctx.strokeRect(minX - pad, minY - pad, maxX - minX + pad*2, maxY - minY + pad*2);
+        ctx.setLineDash([]);
+        
+        ctx.fillStyle = 'rgba(76, 175, 80, 0.8)';
+        ctx.font = `bold ${11 / state.zoomLevel}px sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.fillText('📦 ' + g.name, minX - pad, minY - pad - 4 / state.zoomLevel);
+    });
+
+
     state.walls.forEach(w => {
         const sel = state.selectedItem?.id === w.id;
         ctx.strokeStyle = sel ? '#2196f3' : '#333';
@@ -1538,7 +1576,7 @@ function updateUI() {
     const currentSelectedId = document.getElementById('selectedPanel').dataset.selectedId;
     const newSelectedId = state.selectedItem ? state.selectedItem.id : null;
 
-    if (state.selectedItem && currentSelectedId !== String(newSelectedId)) {
+    if (state.selectedItem && (currentSelectedId !== String(newSelectedId) || document.getElementById('selectedPanel').style.display === 'none')) {
         document.getElementById('selectedPanel').style.display = 'block';
         document.getElementById('selectedPanel').dataset.selectedId = newSelectedId;
         const tt = { room: '部屋', wall: '壁', door: 'ドア', window: '窓', manikin: '人型', dimension: '寸法線' };
@@ -1837,10 +1875,19 @@ canvas.addEventListener('mousedown', e => {
     if (state.selectedTool === 'multi-select') {
         const f = findItemAt(x, y);
         if (f && f.type === 'room') {
-            const idx = state.multiSelectedRooms.indexOf(f.id);
-            if (idx >= 0) state.multiSelectedRooms.splice(idx, 1);
-            else state.multiSelectedRooms.push(f.id);
+            if (state.multiSelectedRooms.includes(f.id)) {
+                state.isDragging = false;
+                state.dragStart = { x, y };
+            } else {
+                state.multiSelectedRooms.push(f.id);
+                draw();
+                return;
+            }
+        } else if (!f) {
+            state.multiSelectedRooms = [];
+            state.dragStart = null;
             draw();
+            return;
         }
         return;
     }
@@ -2074,6 +2121,11 @@ canvas.addEventListener('mousedown', e => {
             state.dragStart = { x, y };
             state.isDragging = false;
         } else if (f) {
+            // ★グループに属していたら複数選択モードに切り替え
+            if (f.type === 'room' && selectGroupIfExists(f.id)) {
+                draw();
+                return;
+            }
             state.selectedItem = f;
             state.selectedVertex = null;
             state.selectedEdge = null;
@@ -2196,12 +2248,19 @@ canvas.addEventListener('mousemove', e => {
     const y = ((e.clientY - rect.top) - state.panOffset.y) / state.zoomLevel;
 
     if (!state.isDragging && state.dragStart && !state.isPanning) {
-        const clientX = e.clientX;
-        const clientY = e.clientY;
-        const startClientX = (state.dragStart.x * state.zoomLevel) + state.panOffset.x + rect.left;
-        const startClientY = (state.dragStart.y * state.zoomLevel) + state.panOffset.y + rect.top;
-        const dx = Math.abs(clientX - startClientX);
-        const dy = Math.abs(clientY - startClientY);
+        let dx, dy;
+        if (state.selectedTool === 'multi-select') {
+            // multi-selectはワールド座標で比較
+            dx = Math.abs(x - state.dragStart.x);
+            dy = Math.abs(y - state.dragStart.y);
+        } else {
+            const clientX = e.clientX;
+            const clientY = e.clientY;
+            const startClientX = (state.dragStart.x * state.zoomLevel) + state.panOffset.x + rect.left;
+            const startClientY = (state.dragStart.y * state.zoomLevel) + state.panOffset.y + rect.top;
+            dx = Math.abs(clientX - startClientX);
+            dy = Math.abs(clientY - startClientY);
+        }
         if (dx > 5 || dy > 5) {
             state.isDragging = true;
             if (state.selectedItem && (state.selectedItem.type === 'door' || state.selectedItem.type === 'window'))
@@ -2299,8 +2358,13 @@ canvas.addEventListener('mousemove', e => {
                 const newPos = snapPointToGrid({ x, y });
                 const dx = newPos.x - fixedPoint.x;
                 const dy = newPos.y - fixedPoint.y;
-                const minSize = 20;
+                const minSize = 30; // 最小サイズを拡大
                 if (Math.abs(dx) < minSize || Math.abs(dy) < minSize) return;
+                
+                // ドラッグ距離が小さい場合は無視（誤操作防止）
+                const dragDistX = Math.abs(x - state.dragStart.x);
+                const dragDistY = Math.abs(y - state.dragStart.y);
+                if (dragDistX < 5 && dragDistY < 5) return;
                 const newVertices = [
                     { x: fixedPoint.x, y: fixedPoint.y },
                     { x: fixedPoint.x + dx, y: fixedPoint.y },
@@ -2384,6 +2448,14 @@ canvas.addEventListener('mousemove', e => {
             }
             state.dragStart = { x, y };
             draw();
+        } else if (state.selectedTool === 'multi-select' && state.multiSelectedRooms.length > 0 && state.dragStart) {
+            const dx = x - state.dragStart.x, dy = y - state.dragStart.y;
+            state.multiSelectedRooms.forEach(id => {
+                const r = state.rooms.find(rm => rm.id === id);
+                if (r) r.vertices = r.vertices.map(v => ({ x: v.x + dx, y: v.y + dy }));
+            });
+            state.dragStart = { x, y };
+            draw();
         } else if (state.selectedItem) {
             const nx = snapToGrid(x - state.dragOffset.x), ny = snapToGrid(y - state.dragOffset.y);
             state.selectedItem.x = nx; state.selectedItem.y = ny;
@@ -2394,6 +2466,9 @@ canvas.addEventListener('mousemove', e => {
 
 canvas.addEventListener('mouseup', () => {
     if (state.isDragging) {
+        // 頂点リサイズの場合、ドラッグ距離が小さければ履歴保存しない
+        const isVertexResize = state.selectedVertex && state.selectedVertex.roomId && state.selectedTool === 'select';
+        
         if (state.selectedItem && state.selectedItem.type === 'room') {
             const r = state.rooms.find(rm => rm.id === state.selectedItem.id);
             if (r) {
@@ -2403,7 +2478,9 @@ canvas.addEventListener('mouseup', () => {
             draw();
         }
         if (state.isDraggingDoorWindow) saveHistory();
-        else if (state.selectedItem && state.selectedItem.type !== 'door' && state.selectedItem.type !== 'window') saveHistory();
+        else if (isVertexResize) {
+            saveHistory();
+        } else if (state.selectedItem && state.selectedItem.type !== 'door' && state.selectedItem.type !== 'window') saveHistory();
     }
     state.isDragging = false;
     state.isDraggingDoorWindow = false;
@@ -2462,19 +2539,44 @@ document.getElementById('resetPan').addEventListener('click', () => {
 });
 
 document.getElementById('rotateBtn').addEventListener('click', () => {
-    if (!state.selectedItem) return;
-    if (state.selectedItem.type === 'room') {
-        const c = getPolygonCenter(state.selectedItem.vertices);
-        state.selectedItem.vertices = state.selectedItem.vertices.map(v => {
-            const dx = v.x - c.x, dy = v.y - c.y;
-            return { x: c.x - dy, y: c.y + dx };
+    if (!state.selectedItem && state.multiSelectedRooms.length === 0) return;
+    
+    if (state.multiSelectedRooms.length > 0) {
+        // 複数選択時：選択部屋全体の重心を支点に90度回転
+        const allVertices = [];
+        state.multiSelectedRooms.forEach(id => {
+            const r = state.rooms.find(rm => rm.id === id);
+            if (r) r.vertices.forEach(v => allVertices.push(v));
+        });
+        const cx = allVertices.reduce((s, v) => s + v.x, 0) / allVertices.length;
+        const cy = allVertices.reduce((s, v) => s + v.y, 0) / allVertices.length;
+        
+        state.multiSelectedRooms.forEach(id => {
+            const r = state.rooms.find(rm => rm.id === id);
+            if (r) {
+                r.vertices = r.vertices.map(v => {
+                    const dx = v.x - cx, dy = v.y - cy;
+                    return { x: cx - dy, y: cy + dx };
+                });
+            }
         });
         saveHistory();
         draw();
-    } else if (state.selectedItem.rotation !== undefined) {
-        state.selectedItem.rotation = (state.selectedItem.rotation + 90) % 360;
-        saveHistory();
-        draw();
+    } else if (state.selectedItem) {
+        // 単体選択時：既存処理
+        if (state.selectedItem.type === 'room') {
+            const c = getPolygonCenter(state.selectedItem.vertices);
+            state.selectedItem.vertices = state.selectedItem.vertices.map(v => {
+                const dx = v.x - c.x, dy = v.y - c.y;
+                return { x: c.x - dy, y: c.y + dx };
+            });
+            saveHistory();
+            draw();
+        } else if (state.selectedItem.rotation !== undefined) {
+            state.selectedItem.rotation = (state.selectedItem.rotation + 90) % 360;
+            saveHistory();
+            draw();
+        }
     }
 });
 
@@ -2497,7 +2599,7 @@ document.getElementById('deleteBtn').addEventListener('click', () => {
 });
 
 document.getElementById('saveBtn').addEventListener('click', () => {
-    const data = { rooms: state.rooms, walls: state.walls, doors: state.doors, windows: state.windows, manikins: state.manikins, dimensions: state.dimensions };
+    const data = { rooms: state.rooms, groups: state.groups, walls: state.walls, doors: state.doors, windows: state.windows, manikins: state.manikins, dimensions: state.dimensions };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -2514,6 +2616,7 @@ document.getElementById('fileInput').addEventListener('change', e => {
         try {
             const d = JSON.parse(ev.target.result);
             state.rooms = d.rooms || [];
+            state.groups = d.groups || []; 
             state.walls = d.walls || [];
             state.doors = d.doors || [];
             state.windows = d.windows || [];
@@ -2710,7 +2813,7 @@ document.getElementById('clearLandBtn').addEventListener('click', () => {
 
 document.getElementById('clearBtn').addEventListener('click', () => {
     if (confirm('すべて削除しますか?')) {
-        state.rooms = []; state.walls = []; state.doors = []; state.windows = []; state.manikins = []; state.dimensions = [];
+        state.rooms = []; state.groups = []; state.walls = []; state.doors = []; state.windows = []; state.manikins = []; state.dimensions = [];
         state.selectedItem = null;
         saveHistory();
         draw();
@@ -2798,6 +2901,53 @@ document.getElementById('addCustomFurniture').addEventListener('click', () => {
     addFurniture(category, furnitureLibrary[category].length - 1);
 });
 
+// グループ化
+function handleGroup() {
+    if (state.multiSelectedRooms.length < 2) { alert('2つ以上選択してください'); return; }
+    
+    // 既存グループに含まれている場合はそのグループを解除してから再グループ化
+    state.groups = state.groups.filter(g => !g.roomIds.some(id => state.multiSelectedRooms.includes(id)));
+    
+    const newGroup = {
+        id: Date.now(),
+        roomIds: [...state.multiSelectedRooms],
+        name: 'グループ' + (state.groups.length + 1)
+    };
+    state.groups.push(newGroup);
+    state.multiSelectedRooms = [...newGroup.roomIds];
+    saveHistory();
+    draw();
+    alert(`${newGroup.name}を作成しました。グループは一緒に移動・回転できます。`);
+}
+
+// グループ解除
+function handleUngroup() {
+    // 選択中の部屋が属するグループを解除
+    const targetGroups = state.groups.filter(g => g.roomIds.some(id => state.multiSelectedRooms.includes(id)));
+    if (targetGroups.length === 0) { alert('選択中の部屋はグループに属していません'); return; }
+    
+    const allRoomIds = [];
+    targetGroups.forEach(g => allRoomIds.push(...g.roomIds));
+    state.groups = state.groups.filter(g => !targetGroups.includes(g));
+    state.multiSelectedRooms = [...new Set(allRoomIds)];
+    saveHistory();
+    draw();
+    alert('グループを解除しました');
+}
+
+// クリック時にグループ全体を選択
+function selectGroupIfExists(roomId) {
+    const group = state.groups.find(g => g.roomIds.includes(roomId));
+    if (group) {
+        state.multiSelectedRooms = [...group.roomIds];
+        state.selectedTool = 'multi-select';
+        document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => btn.classList.remove('active'));
+        document.querySelector('.tool-btn[data-tool="multi-select"]').classList.add('active');
+        return true;
+    }
+    return false;
+}
+
 function handleUnion() {
     if (state.multiSelectedRooms.length < 2) { alert('2つ以上の部屋を選択してください'); return; }
     const selectedRooms = state.rooms.filter(r => state.multiSelectedRooms.includes(r.id));
@@ -2832,10 +2982,15 @@ function handleSubtract() {
 document.getElementById('unionBtnQuick').addEventListener('click', handleUnion);
 document.getElementById('subtractBtnQuick').addEventListener('click', handleSubtract);
 document.getElementById('clearSelectionBtnQuick').addEventListener('click', () => { state.multiSelectedRooms = []; draw(); });
+document.getElementById('rotateMultiBtn').addEventListener('click', () => {
+    document.getElementById('rotateBtn').click();
+});
+document.getElementById('groupBtnQuick').addEventListener('click', handleGroup);
+document.getElementById('ungroupBtnQuick').addEventListener('click', handleUngroup);
 
 document.addEventListener('keydown', e => {
     if (e.key === 'Delete' && state.selectedItem) document.getElementById('deleteBtn').click();
-    else if (e.key === 'r' && state.selectedItem) document.getElementById('rotateBtn').click();
+    else if (e.key === 'r' && (state.selectedItem || state.multiSelectedRooms.length > 0)) document.getElementById('rotateBtn').click();
     else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
     else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
 });
