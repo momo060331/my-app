@@ -284,12 +284,20 @@
     </div>
 
     <div class="section">
+        <div id="dimRoomSelector" style="display:none;">
+            <div class="section-title">📐 計測する部屋を選択</div>
+            <div id="dimRoomList"></div>
+            <button class="danger-btn" id="dimRoomClear" style="font-size:12px;padding:6px;">✕ 絞り込み解除</button>
+        </div>
+    </div>
+
+    <div class="section">
         <div class="section-title">基本設定</div>
         <label>壁の厚さ (cm)</label>
         <input type="number" id="wallThickness" value="12" min="5" max="30">
         <label>グリッド刻み (cm)</label>
         <input type="number" id="gridSize" value="45" min="5" max="200" step="5">
-    </div>
+    </div> 
 
     <div id="selectedPanel" style="display:none;">
         <div class="section selected-info">
@@ -380,6 +388,7 @@ let state = {
     pendingOverlapCheck: false,
     // フィットモード
     fitMode: false,
+    dimTargetRoom: null, // 寸法対象に絞り込んだ部屋ID
 };
 
 // ===== ポリゴン交差判定・重なり領域計算 =====
@@ -1299,7 +1308,8 @@ function updateUI(){
 
     const cid=document.getElementById('selectedPanel').dataset.selectedId;
     const nid=state.selectedItem?state.selectedItem.id:null;
-    if(state.selectedItem&&(cid!==String(nid)||document.getElementById('selectedPanel').style.display==='none')){
+    const isInputFocused = document.activeElement && ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName);
+    if(state.selectedItem&&(cid!==String(nid)||document.getElementById('selectedPanel').style.display==='none'||!isInputFocused)){
         document.getElementById('selectedPanel').style.display='block';
         document.getElementById('selectedPanel').dataset.selectedId=nid;
         const tt={room:'部屋',wall:'壁',door:'ドア',window:'窓',manikin:'人型',dimension:'寸法線'};
@@ -1530,8 +1540,9 @@ canvas.addEventListener('mousedown', e=>{
 
     if(isDimensionTool(state.selectedTool)){
         const getDR=(x,y)=>{
-            for(let r of state.rooms){for(let i=0;i<r.vertices.length;i++){const v=r.vertices[i];if(Math.abs(x-v.x)<10/state.zoomLevel&&Math.abs(y-v.y)<10/state.zoomLevel)return{type:'vertex',roomId:r.id,vertexIndex:i,x:v.x,y:v.y};}}
-            for(let r of state.rooms){for(let i=0;i<r.vertices.length;i++){const j=(i+1)%r.vertices.length;const v1=r.vertices[i],v2=r.vertices[j];const dist=distanceToSegment(x,y,v1.x,v1.y,v2.x,v2.y);if(dist<15/state.zoomLevel){const dx=v2.x-v1.x,dy=v2.y-v1.y,l2=dx*dx+dy*dy;let t=((x-v1.x)*dx+(y-v1.y)*dy)/l2;t=Math.max(0,Math.min(1,t));return{type:'edge',roomId:r.id,edgeIndex:i,x:v1.x+t*dx,y:v1.y+t*dy};}}}
+            const dimRooms = state.dimTargetRoom ? state.rooms.filter(r=>r.id===state.dimTargetRoom) : state.rooms;
+            for(let r of dimRooms){for(let i=0;i<r.vertices.length;i++){const v=r.vertices[i];if(Math.abs(x-v.x)<10/state.zoomLevel&&Math.abs(y-v.y)<10/state.zoomLevel)return{type:'vertex',roomId:r.id,vertexIndex:i,x:v.x,y:v.y};}}
+            for(let r of dimRooms){for(let i=0;i<r.vertices.length;i++){const j=(i+1)%r.vertices.length;const v1=r.vertices[i],v2=r.vertices[j];const dist=distanceToSegment(x,y,v1.x,v1.y,v2.x,v2.y);if(dist<15/state.zoomLevel){const dx=v2.x-v1.x,dy=v2.y-v1.y,l2=dx*dx+dy*dy;let t=((x-v1.x)*dx+(y-v1.y)*dy)/l2;t=Math.max(0,Math.min(1,t));return{type:'edge',roomId:r.id,edgeIndex:i,x:v1.x+t*dx,y:v1.y+t*dy};}}}
             return null;
         };
         const ref=getDR(x,y);
@@ -1832,6 +1843,7 @@ document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{
         document.getElementById('fitModeBtn').style.color='#1565c0';
         document.getElementById('fitModeIndicator').style.display='none';
         canvas.style.cursor=state.selectedTool==='add-vertex'?'crosshair':'default';
+        updateDimRoomSelector();
         draw();
     });
 });
@@ -2030,7 +2042,12 @@ document.getElementById('ungroupBtnQuick').addEventListener('click',handleUngrou
 // ===== タッチ操作 =====
 let lastTouchEnd=0,lastDistance=0;
 canvas.addEventListener('touchstart',e=>{
-    if(e.touches.length===2){const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;lastDistance=Math.sqrt(dx*dx+dy*dy);}
+    if(e.touches.length===2){
+        e.preventDefault();
+        const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
+        lastDistance=Math.sqrt(dx*dx+dy*dy);
+        state.isPanning=false; // ピンチ中はパンを無効化
+    }
     else if(e.touches.length===1){
         e.preventDefault();
         const touch=e.touches[0],rect=canvas.getBoundingClientRect();
@@ -2041,25 +2058,38 @@ canvas.addEventListener('touchstart',e=>{
         else{canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:touch.clientX,clientY:touch.clientY,bubbles:true}));}
     }
 },{passive:false});
+
 canvas.addEventListener('touchmove',e=>{
     e.preventDefault();
     if(e.touches.length===2){
         const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
         const dist=Math.sqrt(dx*dx+dy*dy);
-        if(lastDistance>0) state.zoomLevel=Math.max(0.3,Math.min(3.0,state.zoomLevel+(dist-lastDistance)*0.01));
-        lastDistance=dist; draw();
+        if(lastDistance>0 && Math.abs(dist-lastDistance)<100){ // 急激な変化を防ぐ
+            state.zoomLevel=Math.max(0.3,Math.min(3.0,state.zoomLevel+(dist-lastDistance)*0.01));
+        }
+        lastDistance=dist; draw(); return; // 2本指の場合はここで終了
     } else if(e.touches.length===1){
         const touch=e.touches[0];
         if(state.isPanning){state.panOffset.x+=touch.clientX-state.dragStart.x;state.panOffset.y+=touch.clientY-state.dragStart.y;state.dragStart={x:touch.clientX,y:touch.clientY};draw();}
         else canvas.dispatchEvent(new MouseEvent('mousemove',{clientX:touch.clientX,clientY:touch.clientY,bubbles:true}));
     }
 },{passive:false});
+
 canvas.addEventListener('touchend',e=>{
     e.preventDefault();
-    const now=Date.now();
-    if(now-lastTouchEnd<=300){state.zoomLevel=1.0;draw();}
-    lastTouchEnd=now;
-    canvas.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+    lastDistance=0; // ピンチ距離をリセット
+    if(e.touches.length===0){
+        // 全指を離した時のみmouseupを発行
+        const now=Date.now();
+        if(now-lastTouchEnd<=300 && e.changedTouches.length===1){
+            state.zoomLevel=1.0; draw();
+        }
+        lastTouchEnd=now;
+        if(!state.isDragging){ // ドラッグ中でなければmouseupを発行
+            canvas.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+        }
+    }
+    state.isPanning=false;
 },{passive:false});
 
 document.addEventListener('keydown',e=>{
@@ -2067,7 +2097,7 @@ document.addEventListener('keydown',e=>{
     else if(e.key==='r'&&(state.selectedItem||state.multiSelectedRooms.length>0))document.getElementById('rotateBtn').click();
     else if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){e.preventDefault();undo();}
     else if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){e.preventDefault();redo();}
-    else if(e.key==='Escape'){ state.fitMode=false; fitModePreview=null; document.getElementById('fitModeBtn').style.background='#e3f2fd'; document.getElementById('fitModeBtn').style.color='#1565c0'; document.getElementById('fitModeIndicator').style.display='none';state.dimensionStart=null; state.tempDimensionEnd=null; draw(); }
+    else if(e.key==='Escape'){ state.fitMode=false; fitModePreview=null; document.getElementById('fitModeBtn').style.background='#e3f2fd'; document.getElementById('fitModeBtn').style.color='#1565c0'; document.getElementById('fitModeIndicator').style.display='none';state.dimensionStart=null;state.dimTargetRoom = null;updateDimRoomSelector();state.tempDimensionEnd=null; draw(); }
 });
 
 document.getElementById('undoBtn').addEventListener('click',undo);
@@ -2082,6 +2112,38 @@ document.getElementById('addCustomFurniture').addEventListener('click',()=>{
     const cat=document.getElementById('furnitureCategory').value;
     furnitureLibrary[cat].push(item); displayFurnitureList(cat);
     addFurniture(cat,furnitureLibrary[cat].length-1);
+});
+
+// ===== 寸法ツール: 部屋選択UI =====
+function updateDimRoomSelector() {
+    const panel = document.getElementById('dimRoomSelector');
+    const list = document.getElementById('dimRoomList');
+    if (!isDimensionTool(state.selectedTool)) {
+        panel.style.display = 'none';
+        return;
+    }
+    panel.style.display = 'block';
+    list.innerHTML = state.rooms.map(r => {
+        const active = state.dimTargetRoom === r.id;
+        return `<button style="width:100%;padding:8px;margin-bottom:4px;border:none;border-radius:4px;cursor:pointer;font-size:12px;text-align:left;
+            background:${active ? '#2196f3' : '#e0e0e0'};color:${active ? 'white' : '#333'};"
+            onclick="selectDimRoom(${r.id})">
+            <span style="display:inline-block;width:10px;height:10px;background:${r.color||'#e3f2fd'};border:1px solid #999;border-radius:2px;margin-right:4px;"></span>
+            ${r.name||'部屋'} (${calculateTatamiFromArea(calculatePolygonArea(r.vertices))}畳)
+        </button>`;
+    }).join('');
+}
+function selectDimRoom(roomId) {
+    state.dimTargetRoom = state.dimTargetRoom === roomId ? null : roomId;
+    state.dimensionStart = null;
+    updateDimRoomSelector();
+    draw();
+}
+document.getElementById('dimRoomClear').addEventListener('click', () => {
+    state.dimTargetRoom = null;
+    state.dimensionStart = null;
+    updateDimRoomSelector();
+    draw();
 });
 
 // ===== 初期化 =====
