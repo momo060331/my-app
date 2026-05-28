@@ -313,6 +313,7 @@
             </div>
             <div class="btn-group">
                 <button class="tool-btn" data-tool="manikin">🚶 人型</button>
+                <button class="tool-btn" data-tool="export-region">📐 出力範囲指定</button>
             </div>
             <div class="btn-group">
                 <button class="tool-btn" data-tool="dimension-h">↔️ 水平寸法</button>
@@ -561,6 +562,8 @@ let state = {
     pendingOverlapCheck: false,
     // フィットモード
     fitMode: false,
+    exportRegion: null,      // {x,y,width,height} world座標
+    exportRegionDrag: null,  // ドラッグ中の一時矩形
     dimTargetRoom: null, // 寸法対象に絞り込んだ部屋ID
 };
 
@@ -1494,6 +1497,45 @@ function draw() {
         ctx.setLineDash([8/state.zoomLevel,4/state.zoomLevel]); ctx.stroke(); ctx.setLineDash([]);
     }
 
+    // ===== 出力範囲オーバーレイ =====
+    const drawRegion = state.exportRegionDrag || state.exportRegion;
+    if(drawRegion){
+        ctx.save();
+        // 範囲外を暗く
+        ctx.fillStyle='rgba(0,0,0,0.35)';
+        const vl=-state.panOffset.x/state.zoomLevel,
+            vt=-state.panOffset.y/state.zoomLevel,
+            vr=vl+canvas.width/state.zoomLevel,
+            vb=vt+canvas.height/state.zoomLevel;
+        // 上
+        ctx.fillRect(vl,vt,vr-vl,drawRegion.y-vt);
+        // 下
+        ctx.fillRect(vl,drawRegion.y+drawRegion.height,vr-vl,vb-(drawRegion.y+drawRegion.height));
+        // 左
+        ctx.fillRect(vl,drawRegion.y,drawRegion.x-vl,drawRegion.height);
+        // 右
+        ctx.fillRect(drawRegion.x+drawRegion.width,drawRegion.y,vr-(drawRegion.x+drawRegion.width),drawRegion.height);
+        // 枠線
+        ctx.strokeStyle='#2196f3'; ctx.lineWidth=2/state.zoomLevel;
+        ctx.setLineDash([8/state.zoomLevel,4/state.zoomLevel]);
+        ctx.strokeRect(drawRegion.x,drawRegion.y,drawRegion.width,drawRegion.height);
+        ctx.setLineDash([]);
+        // 角ハンドル
+        ctx.fillStyle='#2196f3';
+        [[0,0],[1,0],[1,1],[0,1]].forEach(([hx,hy])=>{
+            ctx.fillRect(drawRegion.x+hx*drawRegion.width-5/state.zoomLevel,
+                        drawRegion.y+hy*drawRegion.height-5/state.zoomLevel,
+                        10/state.zoomLevel,10/state.zoomLevel);
+        });
+        // サイズ表示
+        ctx.fillStyle='#2196f3'; ctx.font=`bold ${13/state.zoomLevel}px sans-serif`;
+        ctx.textAlign='center';
+        const wm=(drawRegion.width/state.scale).toFixed(2)+'m';
+        const hm=(drawRegion.height/state.scale).toFixed(2)+'m';
+        ctx.fillText(wm, drawRegion.x+drawRegion.width/2, drawRegion.y-8/state.zoomLevel);
+        ctx.fillText(hm, drawRegion.x+drawRegion.width+30/state.zoomLevel, drawRegion.y+drawRegion.height/2);
+        ctx.restore();
+    }
     ctx.restore();
     updateUI();
 }
@@ -1721,6 +1763,12 @@ canvas.addEventListener('mousedown', e=>{
 
     const f=findItemAt(x,y);
 
+    if(state.selectedTool==='export-region'){
+        state.exportRegionDrag={x,y,width:0,height:0};
+        state._exportStart={x,y};
+        draw(); return;
+    }
+
     if(state.selectedTool==='delete'&&f){
         if(f.type==='room'){state.rooms=state.rooms.filter(r=>r.id!==f.id);state.dimensions=state.dimensions.filter(d=>d.roomId!==f.id);}
         else if(f.type==='wall')state.walls=state.walls.filter(w=>w.id!==f.id);
@@ -1898,6 +1946,15 @@ canvas.addEventListener('mousemove', e=>{
         draw(); return;
     }
 
+    if(state.selectedTool==='export-region'&&state._exportStart){
+        const sx=state._exportStart.x, sy=state._exportStart.y;
+        state.exportRegionDrag={
+            x:Math.min(sx,x), y:Math.min(sy,y),
+            width:Math.abs(x-sx), height:Math.abs(y-sy)
+        };
+        draw(); return;
+    }
+
     if(!state.isDragging&&state.dragStart&&!state.isPanning){
         const clientX=e.clientX,clientY=e.clientY;
         const sx=(state.dragStart.x*state.zoomLevel)+state.panOffset.x+rect.left;
@@ -1914,6 +1971,14 @@ canvas.addEventListener('mousemove', e=>{
         state.panOffset.x+=e.clientX-state.dragStart.x;
         state.panOffset.y+=e.clientY-state.dragStart.y;
         state.dragStart={x:e.clientX,y:e.clientY}; draw(); return;
+    }
+    if(state.selectedTool==='export-region'&&state._exportStart){
+        const sx=state._exportStart.x, sy=state._exportStart.y;
+        state.exportRegionDrag={
+            x:Math.min(sx,x), y:Math.min(sy,y),
+            width:Math.abs(x-sx), height:Math.abs(y-sy)
+        };
+        draw(); return;
     }
     if(state.selectedTool==='wall'&&state.wallStartVertex){ state.tempWallEndPos=findNearestVertex(x,y,15)||snapPointToGrid({x,y}); draw(); return; }
     if(isDimensionTool(state.selectedTool)&&state.dimensionStart){ state.tempDimensionEnd={x,y}; draw(); return; }
@@ -2008,6 +2073,14 @@ canvas.addEventListener('mousemove', e=>{
 });
 
 canvas.addEventListener('mouseup', ()=>{
+    if(state.selectedTool==='export-region'&&state.exportRegionDrag){
+        if(state.exportRegionDrag.width>10&&state.exportRegionDrag.height>10){
+            state.exportRegion=state.exportRegionDrag;
+        }
+        state.exportRegionDrag=null;
+        state._exportStart=null;
+        draw(); return;
+    }    
     if(state.isDragging){
         if(state.selectedItem&&state.selectedItem.type==='room'){
             const r=state.rooms.find(rm=>rm.id===state.selectedItem.id);
@@ -2046,6 +2119,7 @@ document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{
         document.getElementById('fitModeBtn').style.background='#e3f2fd';
         document.getElementById('fitModeBtn').style.color='#1565c0';
         document.getElementById('fitModeIndicator').style.display='none';
+        state.exportRegionDrag=null; state._exportStart=null;
         canvas.style.cursor=state.selectedTool==='add-vertex'?'crosshair':'default';
         updateDimRoomSelector();
         draw();
@@ -2143,18 +2217,28 @@ document.getElementById('fileInput').addEventListener('change',e=>{
 });
 
 document.getElementById('exportBtn').addEventListener('click',()=>{
-    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-    if(state.landBoundary){minX=Math.min(minX,state.landBoundary.x);minY=Math.min(minY,state.landBoundary.y);maxX=Math.max(maxX,state.landBoundary.x+state.landBoundary.width);maxY=Math.max(maxY,state.landBoundary.y+state.landBoundary.height);}
-    state.rooms.forEach(r=>r.vertices.forEach(v=>{minX=Math.min(minX,v.x);minY=Math.min(minY,v.y);maxX=Math.max(maxX,v.x);maxY=Math.max(maxY,v.y);}));
-    state.walls.forEach(w=>{minX=Math.min(minX,w.x1,w.x2);minY=Math.min(minY,w.y1,w.y2);maxX=Math.max(maxX,w.x1,w.x2);maxY=Math.max(maxY,w.y1,w.y2);});
-    if(minX===Infinity){alert('何も描画されていません');return;}
-    const margin=50;
-    const eb={x:minX-margin,y:minY-margin,width:(maxX-minX)+margin*2,height:(maxY-minY)+margin*2};
+    let eb;
+    if(state.exportRegion){
+        const r=state.exportRegion;
+        eb={x:r.x, y:r.y, width:r.width, height:r.height};
+    } else {
+        // 従来：全体範囲
+        let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+        if(state.landBoundary){minX=Math.min(minX,state.landBoundary.x);minY=Math.min(minY,state.landBoundary.y);maxX=Math.max(maxX,state.landBoundary.x+state.landBoundary.width);maxY=Math.max(maxY,state.landBoundary.y+state.landBoundary.height);}
+        state.rooms.forEach(r=>r.vertices.forEach(v=>{minX=Math.min(minX,v.x);minY=Math.min(minY,v.y);maxX=Math.max(maxX,v.x);maxY=Math.max(maxY,v.y);}));
+        state.walls.forEach(w=>{minX=Math.min(minX,w.x1,w.x2);minY=Math.min(minY,w.y1,w.y2);maxX=Math.max(maxX,w.x1,w.x2);maxY=Math.max(maxY,w.y1,w.y2);});
+        if(minX===Infinity){alert('何も描画されていません');return;}
+        const margin=50;
+        eb={x:minX-margin,y:minY-margin,width:(maxX-minX)+margin*2,height:(maxY-minY)+margin*2};
+    }
+    if(eb.width<1||eb.height<1){alert('範囲が小さすぎます');return;}
+
     const tc=document.createElement('canvas');
-    tc.width=eb.width; tc.height=eb.height;
+    tc.width=Math.round(eb.width); tc.height=Math.round(eb.height);
     const tx=tc.getContext('2d');
     tx.fillStyle='white'; tx.fillRect(0,0,tc.width,tc.height);
     tx.save(); tx.translate(-eb.x,-eb.y);
+    // 部屋
     state.rooms.forEach(r=>{
         tx.fillStyle=r.color||'#e3f2fd';
         tx.beginPath(); tx.moveTo(r.vertices[0].x,r.vertices[0].y);
@@ -2167,6 +2251,45 @@ document.getElementById('exportBtn').addEventListener('click',()=>{
         tx.font='14px sans-serif'; tx.fillText(calculateTatamiFromArea(calculatePolygonArea(r.vertices))+'畳',c.x,c.y+5);
         if(r.purpose){tx.font='12px sans-serif';tx.fillStyle='#666';tx.fillText(r.purpose,c.x,c.y+22);}
     });
+    // 壁
+    state.walls.forEach(w=>{
+        tx.strokeStyle='#333'; tx.lineWidth=w.thickness; tx.lineCap='square';
+        tx.beginPath(); tx.moveTo(w.x1,w.y1); tx.lineTo(w.x2,w.y2); tx.stroke();
+    });
+    // 寸法線
+    state.dimensions.forEach(dim=>{
+        const coords=getDimensionCoords(dim); if(!coords) return;
+        const{p1,p2}=coords;
+        const offset=dim.offset||-40, dimType=dim.dimType||'h';
+        let ox1,oy1,ox2,oy2,length,angle;
+        if(dimType==='h'){const dimY=(p1.y+p2.y)/2+offset;ox1=p1.x;oy1=dimY;ox2=p2.x;oy2=dimY;length=Math.abs(p2.x-p1.x);angle=0;}
+        else if(dimType==='v'){const dimX=(p1.x+p2.x)/2+offset;ox1=dimX;oy1=p1.y;ox2=dimX;oy2=p2.y;length=Math.abs(p2.y-p1.y);angle=Math.PI/2;}
+        else{const ea=dim.edgeAngle||0,eDx=Math.cos(ea),eDy=Math.sin(ea),nx=-eDy,ny=eDx;const midPerp=((p1.x*nx+p1.y*ny)+(p2.x*nx+p2.y*ny))/2;const dimPerp=midPerp+offset;const par1=p1.x*eDx+p1.y*eDy,par2=p2.x*eDx+p2.y*eDy;ox1=eDx*par1+nx*dimPerp;oy1=eDy*par1+ny*dimPerp;ox2=eDx*par2+nx*dimPerp;oy2=eDy*par2+ny*dimPerp;length=Math.abs(par2-par1);angle=ea;}
+        if(length<0.1) return;
+        tx.strokeStyle='#666'; tx.lineWidth=1;
+        tx.setLineDash([3,3]); tx.beginPath(); tx.moveTo(p1.x,p1.y); tx.lineTo(ox1,oy1); tx.stroke();
+        tx.beginPath(); tx.moveTo(p2.x,p2.y); tx.lineTo(ox2,oy2); tx.stroke(); tx.setLineDash([]);
+        tx.lineWidth=1.5; tx.beginPath(); tx.moveTo(ox1,oy1); tx.lineTo(ox2,oy2); tx.stroke();
+        const as=6; tx.beginPath();
+        tx.moveTo(ox1,oy1); tx.lineTo(ox1+as*Math.cos(angle+Math.PI*0.85),oy1+as*Math.sin(angle+Math.PI*0.85));
+        tx.moveTo(ox1,oy1); tx.lineTo(ox1+as*Math.cos(angle-Math.PI*0.85),oy1+as*Math.sin(angle-Math.PI*0.85));
+        tx.moveTo(ox2,oy2); tx.lineTo(ox2-as*Math.cos(angle+Math.PI*0.85),oy2-as*Math.sin(angle+Math.PI*0.85));
+        tx.moveTo(ox2,oy2); tx.lineTo(ox2-as*Math.cos(angle-Math.PI*0.85),oy2-as*Math.sin(angle-Math.PI*0.85));
+        tx.stroke();
+        const mx=(ox1+ox2)/2,my=(oy1+oy2)/2;
+        tx.save(); tx.translate(mx,my); tx.rotate(angle);
+        const text=formatLength(length);
+        tx.font='bold 12px sans-serif'; tx.textAlign='center'; tx.textBaseline='middle';
+        const met=tx.measureText(text);
+        tx.fillStyle='white'; tx.fillRect(-met.width/2-3,-7,met.width+6,14);
+        tx.fillStyle='#333'; tx.fillText(text,0,0); tx.restore();
+    });
+    // 敷地境界
+    if(state.landBoundary){
+        tx.strokeStyle='#ff5722'; tx.lineWidth=3;
+        tx.setLineDash([10,5]); tx.strokeRect(state.landBoundary.x,state.landBoundary.y,state.landBoundary.width,state.landBoundary.height);
+        tx.setLineDash([]);
+    }
     tx.restore();
     const a=document.createElement('a'); a.download='間取り_'+new Date().toISOString().slice(0,10)+'.png';
     a.href=tc.toDataURL(); a.click();
@@ -2301,7 +2424,7 @@ document.addEventListener('keydown',e=>{
     else if(e.key==='r'&&(state.selectedItem||state.multiSelectedRooms.length>0))document.getElementById('rotateBtn').click();
     else if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){e.preventDefault();undo();}
     else if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){e.preventDefault();redo();}
-    else if(e.key==='Escape'){ state.fitMode=false; fitModePreview=null; document.getElementById('fitModeBtn').style.background='#e3f2fd'; document.getElementById('fitModeBtn').style.color='#1565c0'; document.getElementById('fitModeIndicator').style.display='none';state.dimensionStart=null;state.dimTargetRoom = null;updateDimRoomSelector();state.tempDimensionEnd=null; draw(); }
+    else if(e.key==='Escape'){ state.fitMode=false; fitModePreview=null; document.getElementById('fitModeBtn').style.background='#e3f2fd'; document.getElementById('fitModeBtn').style.color='#1565c0'; document.getElementById('fitModeIndicator').style.display='none';state.exportRegion=null; state.exportRegionDrag=null; state._exportStart=null;state.dimensionStart=null;state.dimTargetRoom = null;updateDimRoomSelector();state.tempDimensionEnd=null; draw(); }
 });
 
 document.getElementById('undoBtn').addEventListener('click',undo);
