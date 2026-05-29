@@ -2620,7 +2620,7 @@ canvas.addEventListener('touchmove',e=>{
             state.panOffset.y+=touch.clientY-state.dragStart.y;
             state.dragStart={x:touch.clientX,y:touch.clientY};
             draw();
-        } else if(state.isDragging){
+        } else {
             canvas.dispatchEvent(new MouseEvent('mousemove',{clientX:touch.clientX,clientY:touch.clientY,bubbles:true}));
         }
     }
@@ -2630,7 +2630,9 @@ canvas.addEventListener('touchcancel',e=>{
     isPinching=false;
     state.isPanning=false;
     state.isDragging=false;
+    state.isDraggingDoorWindow=false;
     state.dragStart=null;
+    state.dragOffset=null;
 });
 
 canvas.addEventListener('touchend',e=>{
@@ -2656,10 +2658,13 @@ canvas.addEventListener('touchend',e=>{
         state.isPanning=false;
         state.dragStart=null;
     } else if(e.touches.length===1){
-        // 2本→1本になった
         isPinching=false;
         state.isPanning=false;
+        state.isDragging=false;
         state.dragStart=null;
+        // 残った1本指を新しいパン起点として登録
+        state.isPanning=true;
+        state.dragStart={x:e.touches[0].clientX, y:e.touches[0].clientY};
     }
 },{passive:false});
 document.addEventListener('keydown',e=>{
