@@ -2546,22 +2546,30 @@ document.getElementById('groupBtnQuick').addEventListener('click',handleGroup);
 document.getElementById('ungroupBtnQuick').addEventListener('click',handleUngroup);
 
 // ===== タッチ操作 =====
-let lastTouchEnd=0, lastDistance=0, lastPinchCenter=null;
+let lastTouchEnd=0;
+let pinchStartDist=0, pinchStartZoom=0, pinchStartCenter=null, pinchStartPan=null;
+let isPinching=false;
 
 canvas.addEventListener('touchstart',e=>{
     if(e.touches.length===2){
         e.preventDefault();
         state.isPanning=false;
         state.isDragging=false;
-        // 最初のmoveで比較できるよう距離を0にリセット
-        // （touchmove側で最初のフレームは距離確定のみ行う）
-        lastDistance=0;
-        lastPinchCenter=null;
+        const dx=e.touches[0].clientX-e.touches[1].clientX;
+        const dy=e.touches[0].clientY-e.touches[1].clientY;
+        pinchStartDist=Math.sqrt(dx*dx+dy*dy);
+        pinchStartZoom=state.zoomLevel;
+        pinchStartCenter={
+            x:(e.touches[0].clientX+e.touches[1].clientX)/2,
+            y:(e.touches[0].clientY+e.touches[1].clientY)/2
+        };
+        pinchStartPan={x:state.panOffset.x, y:state.panOffset.y};
+        isPinching=true;
         return;
     }
     if(e.touches.length===1){
         e.preventDefault();
-        if(lastDistance>0){ lastDistance=0; lastPinchCenter=null; return; }
+        if(isPinching){ isPinching=false; return; }
         const touch=e.touches[0], rect=canvas.getBoundingClientRect();
         const x=((touch.clientX-rect.left)-state.panOffset.x)/state.zoomLevel;
         const y=((touch.clientY-rect.top)-state.panOffset.y)/state.zoomLevel;
@@ -2583,34 +2591,30 @@ canvas.addEventListener('touchmove',e=>{
         const dist=Math.sqrt(dx*dx+dy*dy);
         const cx=(e.touches[0].clientX+e.touches[1].clientX)/2;
         const cy=(e.touches[0].clientY+e.touches[1].clientY)/2;
-
-        // 移動ツールの時だけピンチズーム有効
-        // lastDistanceとdistの差が小さい時だけ有効（置いた瞬間の誤検知を防ぐ）
-        if(state.selectedTool==='pan' && lastDistance>30 && dist>30){
-            const ratio=dist/lastDistance;
-            const change=Math.abs(dist-lastDistance);
-            if(ratio>0.85 && ratio<1.18 && change<60){
-                const rect=canvas.getBoundingClientRect();
-                const wx=(cx-rect.left-state.panOffset.x)/state.zoomLevel;
-                const wy=(cy-rect.top -state.panOffset.y)/state.zoomLevel;
-                const newZoom=Math.max(0.3, Math.min(3.0, state.zoomLevel*ratio));
-                state.panOffset.x=cx-rect.left-wx*newZoom;
-                state.panOffset.y=cy-rect.top -wy*newZoom;
-                state.zoomLevel=newZoom;
-            }
-        }
+        const rect=canvas.getBoundingClientRect();
 
         // 2本指パン（全ツール共通）
-        if(lastPinchCenter){
-            state.panOffset.x+=cx-lastPinchCenter.x;
-            state.panOffset.y+=cy-lastPinchCenter.y;
+        if(pinchStartCenter && pinchStartPan){
+            state.panOffset.x = pinchStartPan.x + (cx - pinchStartCenter.x);
+            state.panOffset.y = pinchStartPan.y + (cy - pinchStartCenter.y);
         }
-        lastDistance=dist;
-        lastPinchCenter={x:cx,y:cy};
+
+        // ピンチズーム：pan ツールのみ、開始時からの絶対比率で計算
+        if(state.selectedTool==='pan' && pinchStartDist>10){
+            const ratio = dist / pinchStartDist;
+            const newZoom = Math.max(0.3, Math.min(3.0, pinchStartZoom * ratio));
+            // ピンチ開始時の中心点を固定したままズーム
+            const wx=(pinchStartCenter.x-rect.left-pinchStartPan.x)/pinchStartZoom;
+            const wy=(pinchStartCenter.y-rect.top -pinchStartPan.y)/pinchStartZoom;
+            state.panOffset.x = (pinchStartCenter.x-rect.left) - wx*newZoom + (cx-pinchStartCenter.x);
+            state.panOffset.y = (pinchStartCenter.y-rect.top)  - wy*newZoom + (cy-pinchStartCenter.y);
+            state.zoomLevel = newZoom;
+        }
+
         draw(); return;
     }
     if(e.touches.length===1){
-        if(lastDistance>0) return;
+        if(isPinching) return;
         const touch=e.touches[0];
         if(state.isPanning){
             state.panOffset.x+=touch.clientX-state.dragStart.x;
@@ -2624,27 +2628,27 @@ canvas.addEventListener('touchmove',e=>{
 },{passive:false});
 
 canvas.addEventListener('touchcancel',e=>{
-    lastDistance=0; lastPinchCenter=null;
+    isPinching=false; pinchStartDist=0;
     state.isPanning=false; state.isDragging=false;
 });
 
 canvas.addEventListener('touchend',e=>{
     e.preventDefault();
     if(e.touches.length===0){
-        if(lastDistance>0){
-            lastDistance=0; lastPinchCenter=null;
+        if(isPinching){
+            isPinching=false; pinchStartDist=0;
             state.isPanning=false; draw(); return;
         }
         const now=Date.now();
         if(now-lastTouchEnd<=300&&e.changedTouches.length===1){
-            state.zoomLevel=1.0; draw();
+            state.zoomLevel=1.5; draw();
         }
         lastTouchEnd=now;
         if(!state.isDragging){
             canvas.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
         }
     } else if(e.touches.length===1){
-        lastDistance=0; lastPinchCenter=null;
+        isPinching=false; pinchStartDist=0;
     }
     state.isPanning=false;
 },{passive:false});
