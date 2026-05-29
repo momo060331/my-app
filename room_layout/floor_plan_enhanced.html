@@ -2606,23 +2606,9 @@ canvas.addEventListener('touchmove',e=>{
         const panDx=cx-pinchStartCx;
         const panDy=cy-pinchStartCy;
 
-        // ピンチズーム（panツールのみ）
-        if(state.selectedTool==='pan' && pinchStartDist>20){
-            const ratio=dist/pinchStartDist;
-            // 0.25〜4倍の範囲に制限（大きすぎる比率は無視）
-            const clampedRatio=Math.max(0.25, Math.min(4.0, ratio));
-            const newZoom=Math.max(0.3, Math.min(3.0, pinchStartZoom*clampedRatio));
-            // ピンチ開始中心点がワールド座標で固定されるようにパンを計算
-            const wx=(pinchStartCx-rect.left-pinchStartPanX)/pinchStartZoom;
-            const wy=(pinchStartCy-rect.top -pinchStartPanY)/pinchStartZoom;
-            state.zoomLevel=newZoom;
-            state.panOffset.x=(pinchStartCx-rect.left)-wx*newZoom+panDx;
-            state.panOffset.y=(pinchStartCy-rect.top )-wy*newZoom+panDy;
-        } else {
-            // panツール以外は2本指パンのみ
-            state.panOffset.x=pinchStartPanX+panDx;
-            state.panOffset.y=pinchStartPanY+panDy;
-        }
+        // 2本指は常にパンのみ（ズームなし）
+        state.panOffset.x=pinchStartPanX+panDx;
+        state.panOffset.y=pinchStartPanY+panDy;
         draw();
         return;
     }
