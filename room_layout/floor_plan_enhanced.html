@@ -2591,9 +2591,8 @@ canvas.addEventListener('touchend',e=>{
             state.zoomLevel=1.0; draw();
         }
         lastTouchEnd=now;
-        if(!state.isDragging){ // ドラッグ中でなければmouseupを発行
-            canvas.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
-        }
+        // isDraggingに関わらず常にmouseupを発行
+        canvas.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
     }
     state.isPanning=false;
 },{passive:false});
