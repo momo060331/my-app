@@ -720,7 +720,7 @@ let state = {
     polygonVertices: [], tempPolygonPos: null,
     // === 重なり関連 ===
     overlapHighlight: true,
-    overlapWarning: true,
+    overlapWarning: false,
     overlapTransparent: true,
     overlappingPairs: [],   // 重なりペア [{roomA, roomB, polygon}]
     // ドラッグ前スナップショット（キャンセル用）
@@ -2263,12 +2263,7 @@ canvas.addEventListener('mouseup', ()=>{
             // 重なり確認
             detectAllOverlaps(); updateOverlapBadge();
             const overlapping=state.overlappingPairs.filter(p=>p.roomAId===state.selectedItem.id||p.roomBId===state.selectedItem.id);
-            if(overlapping.length>0&&state.overlapWarning&&state.preDragSnapshot){
-                showOverlapDialog('移動した部屋が他の部屋と重なっています。どうしますか？',state.selectedItem.id);
-                state.isDragging=false; state.isPanning=false;
-                state.selectedVertex=null; state.selectedEdge=null; state.edgeNormal=null; state.dragStart=null;
-                canvas.style.cursor='default'; return;
-            } else { saveHistory(); draw(); }
+            saveHistory(); draw();
         } else if(state.isDraggingDoorWindow){ saveHistory(); }
         else if(state.selectedVertex&&state.selectedVertex.roomId&&state.selectedTool==='select'){ saveHistory(); }
         else if(state.selectedItem&&state.selectedItem.type!=='door'&&state.selectedItem.type!=='window'){ saveHistory(); }
