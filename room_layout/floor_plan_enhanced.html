@@ -2634,7 +2634,7 @@ canvas.addEventListener('touchmove',e=>{
             state.panOffset.y+=touch.clientY-state.dragStart.y;
             state.dragStart={x:touch.clientX,y:touch.clientY};
             draw();
-        } else {
+        } else if(state.isDragging){
             canvas.dispatchEvent(new MouseEvent('mousemove',{clientX:touch.clientX,clientY:touch.clientY,bubbles:true}));
         }
     }
