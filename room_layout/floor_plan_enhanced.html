@@ -2588,9 +2588,11 @@ canvas.addEventListener('touchmove',e=>{
         const cy=(e.touches[0].clientY+e.touches[1].clientY)/2;
 
         // 移動ツールの時だけピンチズーム有効
+        // lastDistanceとdistの差が小さい時だけ有効（置いた瞬間の誤検知を防ぐ）
         if(state.selectedTool==='pan' && lastDistance>30 && dist>30){
             const ratio=dist/lastDistance;
-            if(ratio>0.7 && ratio<1.5){
+            const change=Math.abs(dist-lastDistance);
+            if(ratio>0.85 && ratio<1.18 && change<60){
                 const rect=canvas.getBoundingClientRect();
                 const wx=(cx-rect.left-state.panOffset.x)/state.zoomLevel;
                 const wy=(cy-rect.top -state.panOffset.y)/state.zoomLevel;
