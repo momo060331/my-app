@@ -132,6 +132,20 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            #sidebar { width: 100%; max-height: 40vh; overflow-y: auto; padding: 10px; }
+            h1 { font-size: 16px; margin-bottom: 10px; }
+            .total-area-display { font-size: 11px !important; padding: 6px !important; margin-bottom: 10px; }
+            .section { margin-bottom: 10px; }
+            .section-title { font-size: 12px; }
+            button { padding: 8px; font-size: 12px; margin-bottom: 4px; }
+            input { padding: 6px; font-size: 12px; }
+            label { font-size: 11px; }
+            #canvas-container { padding: 10px; flex: 1; }
+        }
+        canvas { touch-action: none; }
+        button { -webkit-tap-highlight-color: transparent; }
 
         /* ===== プランタブ ===== */
         .plan-tab {
@@ -156,71 +170,6 @@
         body { flex-direction:column !important; }
         #planTabBar { flex-shrink:0; }
         #main-area { display:flex; flex:1; overflow:hidden; min-height:0; }
-
-        /* ===== モバイル専用 ===== */
-        @media (max-width: 768px) {
-            #sidebar { display: none !important; }
-            #canvas-container { flex: 1; padding: 4px; padding-bottom: 68px; overflow: hidden; }
-            canvas { width: 100% !important; height: 100% !important; border-radius: 0; box-shadow: none; }
-            #planTabBar { padding: 4px 8px; min-height: 36px; }
-            .plan-tab { padding: 4px 10px; font-size: 11px; }
-            #addPlanBtn { padding: 4px 10px; font-size: 11px; }
-            #mobileToolbar {
-                display: flex !important; position: fixed;
-                bottom: 0; left: 0; right: 0; height: 64px;
-                background: #1a1a2e; z-index: 500;
-                align-items: center; justify-content: space-around;
-                padding: 0 4px; box-shadow: 0 -2px 12px rgba(0,0,0,0.3);
-            }
-            .mb-tool-btn {
-                display: flex; flex-direction: column; align-items: center; justify-content: center;
-                width: 52px; height: 52px; border-radius: 12px; border: none;
-                background: transparent; color: #aaa; font-size: 22px;
-                cursor: pointer; padding: 4px 0; margin: 0; flex-shrink: 0;
-                -webkit-tap-highlight-color: transparent;
-            }
-            .mb-tool-btn span.mb-label { font-size: 9px; margin-top: 2px; }
-            .mb-tool-btn.active { background: #2196f3; color: white; }
-            .mb-tool-btn.menu-btn { background: #16213e; color: #90caf9; }
-            #mobileDrawer {
-                display: block !important; position: fixed;
-                bottom: 64px; left: 0; right: 0;
-                background: white; border-radius: 20px 20px 0 0;
-                box-shadow: 0 -4px 30px rgba(0,0,0,0.2);
-                z-index: 490; max-height: 75vh; overflow-y: auto;
-                transform: translateY(100%);
-                transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
-            }
-            #mobileDrawer.open { transform: translateY(0); }
-            #drawerOverlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 480; }
-            #drawerOverlay.show { display: block; }
-            .drawer-handle { width: 40px; height: 4px; background: #ddd; border-radius: 2px; margin: 10px auto 6px; }
-            .drawer-section-title { font-size: 13px; font-weight: bold; color: #1565c0; padding: 8px 16px 4px; border-bottom: 1px solid #f0f0f0; background: #f8f9ff; position: sticky; top: 0; z-index: 1; }
-            .drawer-content { padding: 12px 16px; }
-            .drawer-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
-            .drawer-grid button { padding: 10px 4px; font-size: 11px; border-radius: 8px; border: 1.5px solid #e0e0e0; background: #f5f5f5; color: #333; margin: 0; width: 100%; }
-            .drawer-grid button.active { background: #2196f3; color: white; border-color: #2196f3; }
-            .drawer-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-            .drawer-grid-2 button { padding: 10px 4px; font-size: 12px; border-radius: 8px; border: none; margin: 0; width: 100%; }
-            #mobileAreaBar {
-                display: flex !important; position: fixed;
-                top: 36px; left: 0; right: 0; height: 36px;
-                background: rgba(76,175,80,0.92); color: white;
-                align-items: center; justify-content: center;
-                font-size: 13px; font-weight: bold; z-index: 300; gap: 12px;
-                backdrop-filter: blur(4px);
-            }
-            #mobileAreaBar button { width: auto; padding: 4px 10px; margin: 0; background: rgba(255,255,255,0.25); color: white; border: 1px solid rgba(255,255,255,0.4); border-radius: 12px; font-size: 13px; }
-            #overlapBadge { top: 76px; right: 10px; }
-            #fitModeIndicator { bottom: 80px; }
-            #comparePanel { min-width: unset; width: 94vw; padding: 20px 16px; }
-        }
-        @media (min-width: 769px) {
-            #mobileToolbar { display: none !important; }
-            #mobileDrawer  { display: none !important; }
-            #mobileAreaBar { display: none !important; }
-            #drawerOverlay { display: none !important; }
-        }
 
         /* ===== 面積比較パネル ===== */
         #comparePanel {
@@ -294,12 +243,6 @@
     </style>
 </head>
 <body>
-
-<div id="mobileAreaBar" style="display:none;">
-    <button id="mbUndoBtn" disabled>⏮️</button>
-    <span>総面積: <strong id="mbTotalArea">0.0</strong> 畳</span>
-    <button id="mbRedoBtn" disabled>⏭️</button>
-</div>
 
 <div id="planTabBar" style="
     display:flex; align-items:center; gap:4px; padding:6px 12px;
@@ -527,115 +470,6 @@
 
 
 <input type="file" id="fileInput" style="display:none;" accept=".json">
-
-<!-- モバイル: 下部ツールバー -->
-<div id="mobileToolbar" style="display:none;">
-    <button class="mb-tool-btn active" id="mb-select" onclick="mbSetTool('select')">
-        ✋<span class="mb-label">選択</span>
-    </button>
-    <button class="mb-tool-btn" id="mb-pan" onclick="mbSetTool('pan')">
-        🖐️<span class="mb-label">移動</span>
-    </button>
-    <button class="mb-tool-btn" id="mb-room" onclick="mbSetTool('room')">
-        🏠<span class="mb-label">部屋</span>
-    </button>
-    <button class="mb-tool-btn" id="mb-delete" onclick="mbSetTool('delete')">
-        🗑️<span class="mb-label">削除</span>
-    </button>
-    <button class="mb-tool-btn" id="mb-undo" onclick="undo()" style="color:#ff9800;">
-        ↩️<span class="mb-label">戻す</span>
-    </button>
-    <button class="mb-tool-btn menu-btn" onclick="toggleDrawer()">
-        ☰<span class="mb-label">メニュー</span>
-    </button>
-</div>
-
-<!-- モバイル: ドロワー背景 -->
-<div id="drawerOverlay" onclick="closeDrawer()"></div>
-
-<!-- モバイル: ドロワー本体 -->
-<div id="mobileDrawer" style="display:none;">
-    <div class="drawer-handle"></div>
-
-    <div class="drawer-section-title">🛠️ ツール</div>
-    <div class="drawer-content">
-        <div class="drawer-grid">
-            <button class="tool-btn active" data-tool="select" onclick="closeDrawer()">✋ 選択</button>
-            <button class="tool-btn" data-tool="pan" onclick="closeDrawer()">🖐️ 移動</button>
-            <button class="tool-btn" data-tool="delete" onclick="closeDrawer()">🗑️ 削除</button>
-            <button class="tool-btn" data-tool="room" onclick="closeDrawer()">🏠 四角</button>
-            <button class="tool-btn" data-tool="polygon" onclick="closeDrawer()">📐 多角形</button>
-            <button class="tool-btn" data-tool="multi-select" onclick="closeDrawer()">🔲 複数選択</button>
-            <button class="tool-btn" data-tool="edit-vertex" onclick="closeDrawer()">📍 頂点編集</button>
-            <button class="tool-btn" data-tool="add-vertex" onclick="closeDrawer()">➕ 頂点追加</button>
-            <button class="tool-btn" data-tool="edit-edge" onclick="closeDrawer()">📏 辺編集</button>
-            <button class="tool-btn" data-tool="wall" onclick="closeDrawer()">🧱 壁</button>
-            <button class="tool-btn" data-tool="door-swing" onclick="closeDrawer()">🚪 開き戸</button>
-            <button class="tool-btn" data-tool="door-sliding" onclick="closeDrawer()">🚪 引き戸</button>
-            <button class="tool-btn" data-tool="window" onclick="closeDrawer()">🪟 窓</button>
-            <button class="tool-btn" data-tool="manikin" onclick="closeDrawer()">🚶 人型</button>
-            <button class="tool-btn" data-tool="dimension-h" onclick="closeDrawer()">↔️ 水平寸法</button>
-            <button class="tool-btn" data-tool="dimension-v" onclick="closeDrawer()">↕️ 垂直寸法</button>
-        </div>
-        <button style="width:100%;padding:10px;border-radius:8px;border:1.5px solid #90caf9;background:#e3f2fd;color:#1565c0;font-size:13px;margin-bottom:4px;"
-            onclick="document.getElementById('fitModeBtn').click();closeDrawer();">🧩 空きフィット描画</button>
-    </div>
-
-    <div class="drawer-section-title">🔍 表示</div>
-    <div class="drawer-content">
-        <div class="drawer-grid-2">
-            <button class="info-btn" onclick="document.getElementById('zoomIn').click()">🔍＋ 拡大</button>
-            <button class="info-btn" onclick="document.getElementById('zoomOut').click()">🔍－ 縮小</button>
-            <button class="info-btn" onclick="document.getElementById('resetPan').click();closeDrawer();">🎯 表示リセット</button>
-            <button class="tool-btn" onclick="document.getElementById('toggleGrid').click();">📏 グリッド切替</button>
-        </div>
-    </div>
-
-    <div class="drawer-section-title">🛋️ 家具・設備</div>
-    <div class="drawer-content">
-        <select id="furnitureCategoryM" style="width:100%;padding:6px;margin-bottom:8px;border:1px solid #ddd;border-radius:4px;"
-            onchange="renderMobileFurniture(this.value);">
-            <option value="kitchen">キッチン</option>
-            <option value="bath">浴室</option>
-            <option value="furniture">家具</option>
-            <option value="appliance">家電</option>
-        </select>
-        <div id="mobileFurnitureList" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"></div>
-    </div>
-
-    <div class="drawer-section-title">📍 敷地設定</div>
-    <div class="drawer-content">
-        <div style="display:flex;gap:8px;margin-bottom:8px;">
-            <div style="flex:1;">
-                <label style="font-size:11px;color:#666;">幅 (m)</label>
-                <input type="number" id="landWidthM" value="10.1" min="5" max="100" step="0.1"
-                    style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
-            </div>
-            <div style="flex:1;">
-                <label style="font-size:11px;color:#666;">奥行き (m)</label>
-                <input type="number" id="landDepthM" value="10" min="5" max="100" step="0.1"
-                    style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
-            </div>
-        </div>
-        <div class="drawer-grid-2">
-            <button class="action-btn" onclick="setLandMobile()">📍 敷地表示</button>
-            <button class="info-btn" onclick="document.getElementById('clearLandBtn').click();closeDrawer();">✕ 消去</button>
-        </div>
-    </div>
-
-    <div class="drawer-section-title">💾 操作</div>
-    <div class="drawer-content">
-        <div class="drawer-grid-2">
-            <button class="action-btn" onclick="document.getElementById('saveBtn').click();closeDrawer();">💾 保存</button>
-            <button class="action-btn" onclick="document.getElementById('loadBtn').click();closeDrawer();">📂 読込</button>
-            <button class="action-btn" onclick="document.getElementById('exportBtn').click();closeDrawer();">📥 画像出力</button>
-            <button class="info-btn" style="background:#1565c0;"
-                onclick="document.getElementById('comparePlanBtn').click();closeDrawer();">📊 プラン比較</button>
-        </div>
-        <button class="danger-btn" onclick="document.getElementById('clearBtn').click();">🗑️ 全削除</button>
-    </div>
-    <div style="height:16px;"></div>
-</div>
 
 <script src="https://cdn.jsdelivr.net/npm/martinez-polygon-clipping@0.7.2/dist/martinez.min.js"></script>
 <script>
@@ -1070,12 +904,10 @@ function redo() {
         updateUndoRedoButtons(); draw();
     }
 }
-
 function updateUndoRedoButtons() {
     const u = document.getElementById('undoBtn'), r = document.getElementById('redoBtn');
-    const mu = document.getElementById('mbUndoBtn'), mr = document.getElementById('mbRedoBtn');
-    [u, mu].forEach(b => { if(b) { b.disabled = state.historyIndex <= 0; b.style.opacity = state.historyIndex<=0?'0.5':'1'; }});
-    [r, mr].forEach(b => { if(b) { b.disabled = state.historyIndex >= state.history.length-1; b.style.opacity = state.historyIndex>=state.history.length-1?'0.5':'1'; }});
+    u.disabled = state.historyIndex <= 0; u.style.opacity = state.historyIndex<=0?'0.5':'1';
+    r.disabled = state.historyIndex >= state.history.length-1; r.style.opacity = state.historyIndex>=state.history.length-1?'0.5':'1';
 }
 
 function isDimensionTool(tool) {
@@ -1086,7 +918,6 @@ function switchToSelectTool() {
     state.selectedTool = 'select';
     document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.classList.remove('active'));
     document.querySelector('.tool-btn[data-tool="select"]').classList.add('active');
-    updateMobileToolbar();
     canvas.style.cursor = 'default';
 }
 function snapToGrid(v) { const g=state.gridSize*0.2; return Math.round(v/g)*g; }
@@ -1225,12 +1056,8 @@ function getDimensionCoords(dim) {
 function resizeCanvas(){
     const container=document.getElementById('canvas-container');
     const rect=container.getBoundingClientRect();
-    if(window.innerWidth<=768){
-        canvas.width=rect.width>0?rect.width:window.innerWidth;
-        canvas.height=rect.height>0?rect.height:(window.innerHeight-100);
-    } else {
-        canvas.width=1400;canvas.height=1000;
-    }
+    if(window.innerWidth<=768){canvas.width=rect.width-20;canvas.height=rect.height-20;}
+    else{canvas.width=1400;canvas.height=1000;}
     draw();
 }
 window.addEventListener('resize',resizeCanvas);
@@ -1717,8 +1544,6 @@ function updateUI(){
     const ta=getTotalArea();
     document.getElementById('totalArea').textContent=ta;
     document.getElementById('totalAreaTop').textContent=ta;
-    const mbArea = document.getElementById('mbTotalArea');
-    if(mbArea) mbArea.textContent = ta;
     document.getElementById('roomCount').textContent=state.rooms.length;
     document.getElementById('scaleDisplay').textContent=Math.round(state.zoomLevel*100);
     const mqa=document.getElementById('multiSelectQuickActions');
@@ -2654,57 +2479,6 @@ detectAllOverlaps();
 updateOverlapBadge();
 saveHistory();
 draw();
-
-// ===== モバイル用関数 =====
-function toggleDrawer() {
-    const drawer = document.getElementById('mobileDrawer');
-    const overlay = document.getElementById('drawerOverlay');
-    if(drawer.classList.contains('open')) {
-        drawer.classList.remove('open');
-        overlay.classList.remove('show');
-    } else {
-        renderMobileFurniture(document.getElementById('furnitureCategoryM').value);
-        drawer.classList.add('open');
-        overlay.classList.add('show');
-    }
-}
-function closeDrawer() {
-    document.getElementById('mobileDrawer').classList.remove('open');
-    document.getElementById('drawerOverlay').classList.remove('show');
-}
-function mbSetTool(toolName) {
-    // 既存のtool-btnクリックと同じ処理をtoolNameで呼ぶ
-    const btn = document.querySelector(`.tool-btn[data-tool="${toolName}"]`);
-    if(btn) btn.click();
-    updateMobileToolbar();
-}
-function updateMobileToolbar() {
-    ['select','pan','room','delete'].forEach(t => {
-        const btn = document.getElementById('mb-' + t);
-        if(btn) btn.classList.toggle('active', state.selectedTool === t);
-    });
-}
-function renderMobileFurniture(category) {
-    const items = furnitureLibrary[category] || [];
-    document.getElementById('mobileFurnitureList').innerHTML = items.map((item, idx) =>
-        `<button style="padding:10px 4px;font-size:11px;border-radius:8px;border:1px solid #ddd;background:#f9f9f9;cursor:pointer;"
-            onclick="addFurniture('${category}',${idx});closeDrawer();">
-            ${item.icon}<br>${item.name}
-        </button>`
-    ).join('');
-}
-function setLandMobile() {
-    const w = parseFloat(document.getElementById('landWidthM').value);
-    const d = parseFloat(document.getElementById('landDepthM').value);
-    if(w && d && w > 0 && d > 0) {
-        state.landBoundary = {x:50, y:50, width:w*state.scale, height:d*state.scale};
-        saveHistory(); draw(); closeDrawer();
-    } else alert('正しい数値を入力してください');
-}
-
-// mbUndoBtn/mbRedoBtn のイベント
-document.getElementById('mbUndoBtn').addEventListener('click', undo);
-document.getElementById('mbRedoBtn').addEventListener('click', redo);
 
 window.addEventListener('beforeunload',autoSave);
 window.addEventListener('pagehide',autoSave);
