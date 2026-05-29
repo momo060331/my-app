@@ -1092,7 +1092,7 @@ function switchToSelectTool() {
 function snapToGrid(v) { const g=state.gridSize*0.2; return Math.round(v/g)*g; }
 function snapPointToGrid(p) { return {x:snapToGrid(p.x),y:snapToGrid(p.y)}; }
 
-function snapRoomToNearbyEdges(room, threshold=15) {
+function snapRoomToNearbyEdges(room, threshold=30) {
     const others = state.rooms.filter(r=>r.id!==room.id);
     if (others.length===0) return;
     let bestSnap=null, minDist=threshold;
@@ -2219,7 +2219,10 @@ canvas.addEventListener('mousemove', e=>{
             const dx=x-state.dragStart.x,dy=y-state.dragStart.y;
             const r=state.rooms.find(rm=>rm.id===state.selectedItem.id);
             if(r){r.vertices=r.vertices.map(v=>({x:v.x+dx,y:v.y+dy}));state.selectedItem=r;}
-            state.dragStart={x,y}; draw();
+            state.dragStart={x,y};
+            // ドラッグ中は重なり検出しない（離した時に確定）
+            state.overlappingPairs=[];
+            draw();
         } else if(state.selectedItem&&state.selectedItem.type==='wall'&&state.selectedTool==='select'){
             const dx=x-state.dragStart.x,dy=y-state.dragStart.y;
             state.selectedItem.x1+=dx;state.selectedItem.y1+=dy;state.selectedItem.x2+=dx;state.selectedItem.y2+=dy;
@@ -2259,10 +2262,16 @@ canvas.addEventListener('mouseup', ()=>{
     if(state.isDragging){
         if(state.selectedItem&&state.selectedItem.type==='room'){
             const r=state.rooms.find(rm=>rm.id===state.selectedItem.id);
-            if(r){ snapRoomToNearbyEdges(r); r.vertices=r.vertices.map(v=>snapPointToGrid(v)); }
-            // 重なり確認
+            if(r){
+                // まず辺スナップを試みる（重なっていない場合のみ適用）
+                const snapCandidate=JSON.parse(JSON.stringify(r.vertices));
+                snapRoomToNearbyEdges(r);
+                // スナップ後に重なりが生じたら辺スナップをキャンセル
+                const afterSnapOverlap=state.rooms.filter(other=>other.id!==r.id&&polygonsIntersect(r.vertices,other.vertices));
+                if(afterSnapOverlap.length>0){ r.vertices=snapCandidate; }
+                r.vertices=r.vertices.map(v=>snapPointToGrid(v));
+            }
             detectAllOverlaps(); updateOverlapBadge();
-            const overlapping=state.overlappingPairs.filter(p=>p.roomAId===state.selectedItem.id||p.roomBId===state.selectedItem.id);
             saveHistory(); draw();
         } else if(state.isDraggingDoorWindow){ saveHistory(); }
         else if(state.selectedVertex&&state.selectedVertex.roomId&&state.selectedTool==='select'){ saveHistory(); }
