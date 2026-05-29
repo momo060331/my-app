@@ -6,7 +6,7 @@
     <title>間取り図作成アプリ</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', sans-serif; display: flex; height: 100vh; background: #f5f5f5; }
+        body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction:column; height: 100vh; background: #f5f5f5; overflow:hidden; }
         #sidebar { width: 280px; background: white; box-shadow: 2px 0 5px rgba(0,0,0,0.1); padding: 20px; overflow-y: auto; }
         h1 { font-size: 20px; margin-bottom: 10px; color: #333; }
         .total-area-display { background: #4caf50; color: white; padding: 12px; border-radius: 4px; margin-bottom: 20px; font-size: 16px; font-weight: bold; text-align: center; }
@@ -132,23 +132,189 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        @media (max-width: 768px) {
-            body { flex-direction: column; }
-            #sidebar { width: 100%; max-height: 40vh; overflow-y: auto; padding: 10px; }
-            h1 { font-size: 16px; margin-bottom: 10px; }
-            .total-area-display { font-size: 11px !important; padding: 6px !important; margin-bottom: 10px; }
-            .section { margin-bottom: 10px; }
-            .section-title { font-size: 12px; }
-            button { padding: 8px; font-size: 12px; margin-bottom: 4px; }
-            input { padding: 6px; font-size: 12px; }
-            label { font-size: 11px; }
-            #canvas-container { padding: 10px; flex: 1; }
+
+        /* ===== プランタブ ===== */
+        .plan-tab {
+            display:inline-flex; align-items:center; gap:6px;
+            padding:6px 14px; border-radius:20px; border:2px solid #e0e0e0;
+            background:#f5f5f5; cursor:pointer; font-size:13px; font-weight:bold;
+            color:#555; white-space:nowrap; flex-shrink:0; transition:all 0.15s;
+            user-select:none;
         }
-        canvas { touch-action: none; }
-        button { -webkit-tap-highlight-color: transparent; }
+        .plan-tab:hover { border-color:#90caf9; color:#1565c0; }
+        .plan-tab.active {
+            background:#1565c0; color:white; border-color:#1565c0;
+        }
+        .plan-tab .tab-close {
+            font-size:14px; color:inherit; opacity:0.7; cursor:pointer;
+            padding:0 2px; border-radius:50%;
+        }
+        .plan-tab .tab-close:hover { opacity:1; background:rgba(255,255,255,0.3); }
+        .plan-tab-name { outline:none; border:none; background:transparent;
+            color:inherit; font:inherit; font-weight:bold; width:80px; }
+        /* bodyをcolumnにしてタブバーを上に固定 */
+        body { flex-direction:column !important; }
+        #planTabBar { flex-shrink:0; }
+        #main-area { display:flex; flex:1; overflow:hidden; min-height:0; }
+
+        /* ===== モバイル専用 ===== */
+        @media (max-width: 768px) {
+            #sidebar { display: none !important; }
+            #canvas-container { flex: 1; padding: 4px; padding-bottom: 68px; overflow: hidden; }
+            canvas { width: 100% !important; height: 100% !important; border-radius: 0; box-shadow: none; }
+            #planTabBar { padding: 4px 8px; min-height: 36px; }
+            .plan-tab { padding: 4px 10px; font-size: 11px; }
+            #addPlanBtn { padding: 4px 10px; font-size: 11px; }
+            #mobileToolbar {
+                display: flex !important; position: fixed;
+                bottom: 0; left: 0; right: 0; height: 64px;
+                background: #1a1a2e; z-index: 500;
+                align-items: center; justify-content: space-around;
+                padding: 0 4px; box-shadow: 0 -2px 12px rgba(0,0,0,0.3);
+            }
+            .mb-tool-btn {
+                display: flex; flex-direction: column; align-items: center; justify-content: center;
+                width: 52px; height: 52px; border-radius: 12px; border: none;
+                background: transparent; color: #aaa; font-size: 22px;
+                cursor: pointer; padding: 4px 0; margin: 0; flex-shrink: 0;
+                -webkit-tap-highlight-color: transparent;
+            }
+            .mb-tool-btn span.mb-label { font-size: 9px; margin-top: 2px; }
+            .mb-tool-btn.active { background: #2196f3; color: white; }
+            .mb-tool-btn.menu-btn { background: #16213e; color: #90caf9; }
+            #mobileDrawer {
+                display: block !important; position: fixed;
+                bottom: 64px; left: 0; right: 0;
+                background: white; border-radius: 20px 20px 0 0;
+                box-shadow: 0 -4px 30px rgba(0,0,0,0.2);
+                z-index: 490; max-height: 75vh; overflow-y: auto;
+                transform: translateY(100%);
+                transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+            }
+            #mobileDrawer.open { transform: translateY(0); }
+            #drawerOverlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 480; }
+            #drawerOverlay.show { display: block; }
+            .drawer-handle { width: 40px; height: 4px; background: #ddd; border-radius: 2px; margin: 10px auto 6px; }
+            .drawer-section-title { font-size: 13px; font-weight: bold; color: #1565c0; padding: 8px 16px 4px; border-bottom: 1px solid #f0f0f0; background: #f8f9ff; position: sticky; top: 0; z-index: 1; }
+            .drawer-content { padding: 12px 16px; }
+            .drawer-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+            .drawer-grid button { padding: 10px 4px; font-size: 11px; border-radius: 8px; border: 1.5px solid #e0e0e0; background: #f5f5f5; color: #333; margin: 0; width: 100%; }
+            .drawer-grid button.active { background: #2196f3; color: white; border-color: #2196f3; }
+            .drawer-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+            .drawer-grid-2 button { padding: 10px 4px; font-size: 12px; border-radius: 8px; border: none; margin: 0; width: 100%; }
+            #mobileAreaBar {
+                display: flex !important; position: fixed;
+                top: 36px; left: 0; right: 0; height: 36px;
+                background: rgba(76,175,80,0.92); color: white;
+                align-items: center; justify-content: center;
+                font-size: 13px; font-weight: bold; z-index: 300; gap: 12px;
+                backdrop-filter: blur(4px);
+            }
+            #mobileAreaBar button { width: auto; padding: 4px 10px; margin: 0; background: rgba(255,255,255,0.25); color: white; border: 1px solid rgba(255,255,255,0.4); border-radius: 12px; font-size: 13px; }
+            #overlapBadge { top: 76px; right: 10px; }
+            #fitModeIndicator { bottom: 80px; }
+            #comparePanel { min-width: unset; width: 94vw; padding: 20px 16px; }
+        }
+        @media (min-width: 769px) {
+            #mobileToolbar { display: none !important; }
+            #mobileDrawer  { display: none !important; }
+            #mobileAreaBar { display: none !important; }
+            #drawerOverlay { display: none !important; }
+        }
+
+        /* ===== 面積比較パネル ===== */
+        #comparePanel {
+            display: none;
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 16px;
+            padding: 28px 32px;
+            min-width: 420px;
+            max-width: 90vw;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+            z-index: 2000;
+            animation: dialogIn 0.2s ease;
+        }
+        #compareOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 1999;
+        }
+        .compare-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 13px;
+        }
+        .compare-row.header {
+            font-weight: bold;
+            color: #555;
+            font-size: 12px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 6px;
+        }
+        .compare-bar-wrap {
+            background: #f5f5f5;
+            border-radius: 4px;
+            height: 18px;
+            overflow: hidden;
+        }
+        .compare-bar {
+            height: 100%;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            padding: 0 6px;
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+            transition: width 0.4s ease;
+            white-space: nowrap;
+        }
+        .compare-copy-btn {
+            font-size: 11px;
+            padding: 4px 8px;
+            border: 1px solid #90caf9;
+            border-radius: 4px;
+            background: #e3f2fd;
+            color: #1565c0;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .compare-copy-btn:hover { background: #1565c0; color: white; }
     </style>
 </head>
 <body>
+
+<div id="mobileAreaBar" style="display:none;">
+    <button id="mbUndoBtn" disabled>⏮️</button>
+    <span>総面積: <strong id="mbTotalArea">0.0</strong> 畳</span>
+    <button id="mbRedoBtn" disabled>⏭️</button>
+</div>
+
+<div id="planTabBar" style="
+    display:flex; align-items:center; gap:4px; padding:6px 12px;
+    background:#fff; border-bottom:2px solid #e0e0e0;
+    overflow-x:auto; white-space:nowrap; min-height:44px;
+    box-shadow:0 2px 4px rgba(0,0,0,0.08); z-index:200; position:relative;
+">
+    <div id="planTabs" style="display:flex;gap:4px;"></div>
+    <button id="addPlanBtn" style="
+        padding:6px 12px; border:2px dashed #90caf9; border-radius:20px;
+        background:transparent; color:#1565c0; cursor:pointer; font-size:13px;
+        white-space:nowrap; flex-shrink:0;
+    ">＋ プラン追加</button>
+</div>
+
 <!-- ===== オーバーラップ確認ダイアログ ===== -->
 <div id="overlapDialog">
     <div class="dialog-box">
@@ -171,169 +337,305 @@
     <div class="ctx-item danger" id="ctx-delete">🗑️ 選択部屋を削除</div>
 </div>
 
-<div id="sidebar">
-    <h1>🏠 間取り図作成</h1>
-    <div class="total-area-display" style="display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: nowrap;">
-        <button class="info-btn" id="undoBtn" disabled style="padding: 6px 10px; margin: 0; font-size: 14px; min-width: 36px;">⏮️</button>
-        <span style="white-space: nowrap;">総面積: <span id="totalAreaTop">0.0</span> 畳</span>
-        <button class="info-btn" id="redoBtn" disabled style="padding: 6px 10px; margin: 0; font-size: 14px; min-width: 36px;">⏭️</button>
-    </div>
-    
-    <div class="section">
-        <div class="section-title">ツール選択</div>
-        <div class="btn-group">
-            <button class="tool-btn active" data-tool="select">✋ 選択</button>
-            <button class="tool-btn" data-tool="pan">🖐️ 移動</button>
+<div id="main-area">
+  <div id="sidebar">
+        <h1>🏠 間取り図作成</h1>
+        <div class="total-area-display" style="display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: nowrap;">
+            <button class="info-btn" id="undoBtn" disabled style="padding: 6px 10px; margin: 0; font-size: 14px; min-width: 36px;">⏮️</button>
+            <span style="white-space: nowrap;">総面積: <span id="totalAreaTop">0.0</span> 畳</span>
+            <button class="info-btn" id="redoBtn" disabled style="padding: 6px 10px; margin: 0; font-size: 14px; min-width: 36px;">⏭️</button>
         </div>
-        <button class="tool-btn" data-tool="delete">🗑️ 削除</button>
-        <div class="btn-group">
-            <button class="tool-btn" data-tool="room">🏠 四角</button>
-            <button class="tool-btn" data-tool="polygon">📐 多角形</button>
-        </div>
-        <div class="btn-group">
-            <button class="tool-btn" data-tool="edit-vertex">📍 編集</button>
-            <button class="tool-btn" data-tool="add-vertex">➕ 追加</button>
-            <button class="tool-btn" data-tool="edit-edge">📏 辺</button>
-        </div>
-        <button class="tool-btn" data-tool="wall">🧱 壁追加</button>
-        <div class="btn-group">
-            <button class="tool-btn" data-tool="door-swing">🚪開</button>
-            <button class="tool-btn" data-tool="door-sliding">🚪引</button>
-            <button class="tool-btn" data-tool="window">🪟窓</button>
-        </div>
-        <div class="btn-group">
-            <button class="tool-btn" data-tool="manikin">🚶 人型</button>
-        </div>
-        <div class="btn-group">
-            <button class="tool-btn" data-tool="dimension-h">↔️ 水平寸法</button>
-            <button class="tool-btn" data-tool="dimension-v">↕️ 垂直寸法</button>
-        </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-top:4px;margin-bottom:4px;">
-            <input type="checkbox" id="dimensionParallel" style="width:auto;margin:0;">
-            📐 辺に平行（辺選択時のみ）
-        </label>
-        <button class="tool-btn" data-tool="multi-select">🔲 複数選択</button>
-
-        <!-- 空きスペースフィットモード -->
-        <button class="tool-btn" id="fitModeBtn" style="margin-top:4px; background:#e3f2fd; color:#1565c0; border: 1.5px solid #90caf9;">🧩 空きフィット描画</button>
-
-        <div id="multiSelectQuickActions" style="display:none; margin-top: 8px;">
-            <div style="font-size: 11px; color: #666; margin-bottom: 4px;">選択中: <span id="selectedCountQuick">0</span>個</div>
+        
+        <div class="section">
+            <div class="section-title">ツール選択</div>
             <div class="btn-group">
-                <button class="action-btn" id="unionBtnQuick" style="font-size: 12px; padding: 6px;">➕ 合成</button>
-                <button class="info-btn" id="subtractBtnQuick" style="font-size: 12px; padding: 6px;">➖ 減算</button>
+                <button class="tool-btn active" data-tool="select">✋ 選択</button>
+                <button class="tool-btn" data-tool="pan">🖐️ 移動</button>
+            </div>
+            <button class="tool-btn" data-tool="delete">🗑️ 削除</button>
+            <div class="btn-group">
+                <button class="tool-btn" data-tool="room">🏠 四角</button>
+                <button class="tool-btn" data-tool="polygon">📐 多角形</button>
             </div>
             <div class="btn-group">
-                <button class="action-btn" id="groupBtnQuick" style="font-size: 12px; padding: 6px; background:#4caf50;">📦 グループ化</button>
-                <button class="info-btn" id="ungroupBtnQuick" style="font-size: 12px; padding: 6px;">📂 解除</button>
+                <button class="tool-btn" data-tool="edit-vertex">📍 編集</button>
+                <button class="tool-btn" data-tool="add-vertex">➕ 追加</button>
+                <button class="tool-btn" data-tool="edit-edge">📏 辺</button>
             </div>
-            <button class="info-btn" id="rotateMultiBtn" style="font-size: 12px; padding: 6px; margin-top: 4px; width: 100%;">🔄 90度回転</button>
-            <button class="danger-btn" id="clearSelectionBtnQuick" style="font-size: 12px; padding: 6px; margin-top: 4px;">❌ 選択解除</button>
+            <button class="tool-btn" data-tool="wall">🧱 壁追加</button>
+            <div class="btn-group">
+                <button class="tool-btn" data-tool="door-swing">🚪開</button>
+                <button class="tool-btn" data-tool="door-sliding">🚪引</button>
+                <button class="tool-btn" data-tool="window">🪟窓</button>
+            </div>
+            <div class="btn-group">
+                <button class="tool-btn" data-tool="manikin">🚶 人型</button>
+                <button class="tool-btn" data-tool="export-region">📐 出力範囲指定</button>
+            </div>
+            <div class="btn-group">
+                <button class="tool-btn" data-tool="dimension-h">↔️ 水平寸法</button>
+                <button class="tool-btn" data-tool="dimension-v">↕️ 垂直寸法</button>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-top:4px;margin-bottom:4px;">
+                <input type="checkbox" id="dimensionParallel" style="width:auto;margin:0;">
+                📐 辺に平行（辺選択時のみ）
+            </label>
+            <button class="tool-btn" data-tool="multi-select">🔲 複数選択</button>
+
+            <!-- 空きスペースフィットモード -->
+            <button class="tool-btn" id="fitModeBtn" style="margin-top:4px; background:#e3f2fd; color:#1565c0; border: 1.5px solid #90caf9;">🧩 空きフィット描画</button>
+
+            <div id="multiSelectQuickActions" style="display:none; margin-top: 8px;">
+                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">選択中: <span id="selectedCountQuick">0</span>個</div>
+                <div class="btn-group">
+                    <button class="action-btn" id="unionBtnQuick" style="font-size: 12px; padding: 6px;">➕ 合成</button>
+                    <button class="info-btn" id="subtractBtnQuick" style="font-size: 12px; padding: 6px;">➖ 減算</button>
+                </div>
+                <div class="btn-group">
+                    <button class="action-btn" id="groupBtnQuick" style="font-size: 12px; padding: 6px; background:#4caf50;">📦 グループ化</button>
+                    <button class="info-btn" id="ungroupBtnQuick" style="font-size: 12px; padding: 6px;">📂 解除</button>
+                </div>
+                <button class="info-btn" id="rotateMultiBtn" style="font-size: 12px; padding: 6px; margin-top: 4px; width: 100%;">🔄 90度回転</button>
+                <button class="danger-btn" id="clearSelectionBtnQuick" style="font-size: 12px; padding: 6px; margin-top: 4px;">❌ 選択解除</button>
+            </div>
+
+            <!-- 重なり設定 -->
+            <div style="margin-top:10px; padding: 10px; background:#fff8e1; border-radius:6px; border:1px solid #ffe082;">
+                <div style="font-size:12px; font-weight:bold; color:#e65100; margin-bottom:6px;">⚠️ 重なり設定</div>
+                <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; margin-bottom:4px;">
+                    <input type="checkbox" id="overlapHighlight" checked style="width:auto; margin:0;"> 重なりをハイライト表示
+                </label>
+                <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; margin-bottom:4px;">
+                    <input type="checkbox" id="overlapWarning" checked style="width:auto; margin:0;"> 重ねる前に確認する
+                </label>
+                <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+                    <input type="checkbox" id="overlapTransparent" checked style="width:auto; margin:0;"> 重なり部分を半透明に
+                </label>
+            </div>
+
+            <div class="hint" style="margin-top:8px;">💡 右クリックで重なった部屋を選択<br>💡 🧩ボタンで空きスペース自動フィット<br>💡 重なりはオレンジ色でハイライト</div>
         </div>
 
-        <!-- 重なり設定 -->
-        <div style="margin-top:10px; padding: 10px; background:#fff8e1; border-radius:6px; border:1px solid #ffe082;">
-            <div style="font-size:12px; font-weight:bold; color:#e65100; margin-bottom:6px;">⚠️ 重なり設定</div>
-            <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; margin-bottom:4px;">
-                <input type="checkbox" id="overlapHighlight" checked style="width:auto; margin:0;"> 重なりをハイライト表示
-            </label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; margin-bottom:4px;">
-                <input type="checkbox" id="overlapWarning" checked style="width:auto; margin:0;"> 重ねる前に確認する
-            </label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
-                <input type="checkbox" id="overlapTransparent" checked style="width:auto; margin:0;"> 重なり部分を半透明に
-            </label>
+        <div class="section">
+            <div class="section-title">敷地設定</div>
+            <label>敷地の幅 (m)</label>
+            <input type="number" id="landWidth" value="10.1" min="5" max="100" step="0.1">
+            <label>敷地の奥行き (m)</label>
+            <input type="number" id="landDepth" value="10" min="5" max="100" step="0.1">
+            <button class="action-btn" id="setLandBtn">敷地範囲を表示</button>
+            <button class="info-btn" id="clearLandBtn" style="margin-top:4px;">敷地範囲を消去</button>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">表示設定</div>
+            <label>拡大縮小 (<span id="scaleDisplay">100</span>%)</label>
+            <div class="btn-group">
+                <button class="info-btn" id="zoomOut">🔍−</button>
+                <button class="info-btn" id="zoomReset">100%</button>
+                <button class="info-btn" id="zoomIn">🔍+</button>
+            </div>
+            <button class="tool-btn" id="toggleGrid" style="margin-top:8px;">📏 グリッド: ON</button>
+            <button class="tool-btn" id="toggleTatamiGrid" style="margin-top:4px;">🟧 1畳グリッド: ON</button>
+            <button class="info-btn" id="resetPan" style="margin-top:4px;">🎯 表示リセット</button>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">家具・設備</div>
+            <select id="furnitureCategory">
+                <option value="kitchen">キッチン</option>
+                <option value="bath">浴室</option>
+                <option value="furniture">家具</option>
+                <option value="appliance">家電</option>
+            </select>
+            <div id="furnitureList" style="max-height: 200px; overflow-y: auto; margin-top: 8px;"></div>
+            <button class="action-btn" id="addCustomFurniture" style="margin-top: 8px;">📦 カスタム家具作成</button>
         </div>
 
-        <div class="hint" style="margin-top:8px;">💡 右クリックで重なった部屋を選択<br>💡 🧩ボタンで空きスペース自動フィット<br>💡 重なりはオレンジ色でハイライト</div>
+        <div class="section">
+            <div id="dimRoomSelector" style="display:none;">
+                <div class="section-title">📐 計測する部屋を選択</div>
+                <div id="dimRoomList"></div>
+                <button class="danger-btn" id="dimRoomClear" style="font-size:12px;padding:6px;">✕ 絞り込み解除</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">基本設定</div>
+            <label>壁の厚さ (cm)</label>
+            <input type="number" id="wallThickness" value="12" min="5" max="30">
+            <label>グリッド刻み (cm)</label>
+            <input type="number" id="gridSize" value="45" min="5" max="200" step="5">
+        </div> 
+
+        <div id="selectedPanel" style="display:none;">
+            <div class="section selected-info">
+                <div class="section-title">選択中</div>
+                <div id="selectedType"></div>
+                <div id="selectedControls"></div>
+                <div class="btn-group" style="margin-top:10px;">
+                    <button class="info-btn" id="rotateBtn">🔄</button>
+                    <button class="danger-btn" id="deleteBtn">🗑️</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">面積情報</div>
+            <div class="info-box">
+                <p><strong>総面積:</strong> <span id="totalArea">0.0</span> 畳</p>
+                <p><strong>部屋数:</strong> <span id="roomCount">0</span></p>
+                <p><strong>重なり:</strong> <span id="overlapCount" style="color:#d32f2f;">0</span> 箇所</p>
+            </div>
+        </div>
+
+        <div class="section">
+            <button class="action-btn" id="saveBtn">💾 保存</button>
+            <button class="action-btn" id="loadBtn">📂 読込</button>
+            <button class="action-btn" id="exportBtn">📥 画像</button>
+            <button class="info-btn" id="comparePlanBtn" style="background:#1565c0;">📊 プラン比較</button>
+            <button class="danger-btn" id="clearBtn">🗑️ クリア</button>
+        </div>
+    </div>
+    <div id="canvas-container">
+        <div id="overlapBadge">⚠️ <span id="overlapBadgeCount">0</span>箇所 重なりあり</div>
+        <div id="fitModeIndicator">🧩 空きフィットモード: クリックして部屋を配置</div>
+        <canvas id="canvas" width="1400" height="1000"></canvas>
+    </div>    
+</div>
+
+<!-- ===== 面積比較・コピペパネル ===== -->
+<div id="compareOverlay"></div>
+<div id="comparePanel">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <h3 style="font-size:18px;color:#1565c0;margin:0;">📊 プラン比較</h3>
+        <button id="comparePanelClose" style="border:none;background:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+    <div class="compare-row header">
+        <span>プラン名</span>
+        <span>面積</span>
+        <span>現プランへコピー</span>
+    </div>
+    <div id="compareRows"></div>
+    <div style="margin-top:16px;padding-top:16px;border-top:2px solid #e0e0e0;">
+        <div style="font-size:12px;color:#888;margin-bottom:8px;">💡 「部屋をコピー」: 選択中の部屋を現在のプランへ貼り付け</div>
+        <div id="copyRoomPanel" style="display:none;">
+            <div style="font-size:13px;font-weight:bold;margin-bottom:6px;">コピー元プランを選択:</div>
+            <div id="copyRoomPlanList"></div>
+        </div>
+    </div>
+</div>
+
+
+<input type="file" id="fileInput" style="display:none;" accept=".json">
+
+<!-- モバイル: 下部ツールバー -->
+<div id="mobileToolbar" style="display:none;">
+    <button class="mb-tool-btn active" id="mb-select" onclick="mbSetTool('select')">
+        ✋<span class="mb-label">選択</span>
+    </button>
+    <button class="mb-tool-btn" id="mb-pan" onclick="mbSetTool('pan')">
+        🖐️<span class="mb-label">移動</span>
+    </button>
+    <button class="mb-tool-btn" id="mb-room" onclick="mbSetTool('room')">
+        🏠<span class="mb-label">部屋</span>
+    </button>
+    <button class="mb-tool-btn" id="mb-delete" onclick="mbSetTool('delete')">
+        🗑️<span class="mb-label">削除</span>
+    </button>
+    <button class="mb-tool-btn" id="mb-undo" onclick="undo()" style="color:#ff9800;">
+        ↩️<span class="mb-label">戻す</span>
+    </button>
+    <button class="mb-tool-btn menu-btn" onclick="toggleDrawer()">
+        ☰<span class="mb-label">メニュー</span>
+    </button>
+</div>
+
+<!-- モバイル: ドロワー背景 -->
+<div id="drawerOverlay" onclick="closeDrawer()"></div>
+
+<!-- モバイル: ドロワー本体 -->
+<div id="mobileDrawer" style="display:none;">
+    <div class="drawer-handle"></div>
+
+    <div class="drawer-section-title">🛠️ ツール</div>
+    <div class="drawer-content">
+        <div class="drawer-grid">
+            <button class="tool-btn active" data-tool="select" onclick="closeDrawer()">✋ 選択</button>
+            <button class="tool-btn" data-tool="pan" onclick="closeDrawer()">🖐️ 移動</button>
+            <button class="tool-btn" data-tool="delete" onclick="closeDrawer()">🗑️ 削除</button>
+            <button class="tool-btn" data-tool="room" onclick="closeDrawer()">🏠 四角</button>
+            <button class="tool-btn" data-tool="polygon" onclick="closeDrawer()">📐 多角形</button>
+            <button class="tool-btn" data-tool="multi-select" onclick="closeDrawer()">🔲 複数選択</button>
+            <button class="tool-btn" data-tool="edit-vertex" onclick="closeDrawer()">📍 頂点編集</button>
+            <button class="tool-btn" data-tool="add-vertex" onclick="closeDrawer()">➕ 頂点追加</button>
+            <button class="tool-btn" data-tool="edit-edge" onclick="closeDrawer()">📏 辺編集</button>
+            <button class="tool-btn" data-tool="wall" onclick="closeDrawer()">🧱 壁</button>
+            <button class="tool-btn" data-tool="door-swing" onclick="closeDrawer()">🚪 開き戸</button>
+            <button class="tool-btn" data-tool="door-sliding" onclick="closeDrawer()">🚪 引き戸</button>
+            <button class="tool-btn" data-tool="window" onclick="closeDrawer()">🪟 窓</button>
+            <button class="tool-btn" data-tool="manikin" onclick="closeDrawer()">🚶 人型</button>
+            <button class="tool-btn" data-tool="dimension-h" onclick="closeDrawer()">↔️ 水平寸法</button>
+            <button class="tool-btn" data-tool="dimension-v" onclick="closeDrawer()">↕️ 垂直寸法</button>
+        </div>
+        <button style="width:100%;padding:10px;border-radius:8px;border:1.5px solid #90caf9;background:#e3f2fd;color:#1565c0;font-size:13px;margin-bottom:4px;"
+            onclick="document.getElementById('fitModeBtn').click();closeDrawer();">🧩 空きフィット描画</button>
     </div>
 
-    <div class="section">
-        <div class="section-title">敷地設定</div>
-        <label>敷地の幅 (m)</label>
-        <input type="number" id="landWidth" value="10.1" min="5" max="100" step="0.1">
-        <label>敷地の奥行き (m)</label>
-        <input type="number" id="landDepth" value="10" min="5" max="100" step="0.1">
-        <button class="action-btn" id="setLandBtn">敷地範囲を表示</button>
-        <button class="info-btn" id="clearLandBtn" style="margin-top:4px;">敷地範囲を消去</button>
-    </div>
-    
-    <div class="section">
-        <div class="section-title">表示設定</div>
-        <label>拡大縮小 (<span id="scaleDisplay">100</span>%)</label>
-        <div class="btn-group">
-            <button class="info-btn" id="zoomOut">🔍−</button>
-            <button class="info-btn" id="zoomReset">100%</button>
-            <button class="info-btn" id="zoomIn">🔍+</button>
+    <div class="drawer-section-title">🔍 表示</div>
+    <div class="drawer-content">
+        <div class="drawer-grid-2">
+            <button class="info-btn" onclick="document.getElementById('zoomIn').click()">🔍＋ 拡大</button>
+            <button class="info-btn" onclick="document.getElementById('zoomOut').click()">🔍－ 縮小</button>
+            <button class="info-btn" onclick="document.getElementById('resetPan').click();closeDrawer();">🎯 表示リセット</button>
+            <button class="tool-btn" onclick="document.getElementById('toggleGrid').click();">📏 グリッド切替</button>
         </div>
-        <button class="tool-btn" id="toggleGrid" style="margin-top:8px;">📏 グリッド: ON</button>
-        <button class="tool-btn" id="toggleTatamiGrid" style="margin-top:4px;">🟧 1畳グリッド: ON</button>
-        <button class="info-btn" id="resetPan" style="margin-top:4px;">🎯 表示リセット</button>
     </div>
-    
-    <div class="section">
-        <div class="section-title">家具・設備</div>
-        <select id="furnitureCategory">
+
+    <div class="drawer-section-title">🛋️ 家具・設備</div>
+    <div class="drawer-content">
+        <select id="furnitureCategoryM" style="width:100%;padding:6px;margin-bottom:8px;border:1px solid #ddd;border-radius:4px;"
+            onchange="renderMobileFurniture(this.value);">
             <option value="kitchen">キッチン</option>
             <option value="bath">浴室</option>
             <option value="furniture">家具</option>
             <option value="appliance">家電</option>
         </select>
-        <div id="furnitureList" style="max-height: 200px; overflow-y: auto; margin-top: 8px;"></div>
-        <button class="action-btn" id="addCustomFurniture" style="margin-top: 8px;">📦 カスタム家具作成</button>
+        <div id="mobileFurnitureList" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"></div>
     </div>
 
-    <div class="section">
-        <div id="dimRoomSelector" style="display:none;">
-            <div class="section-title">📐 計測する部屋を選択</div>
-            <div id="dimRoomList"></div>
-            <button class="danger-btn" id="dimRoomClear" style="font-size:12px;padding:6px;">✕ 絞り込み解除</button>
-        </div>
-    </div>
-
-    <div class="section">
-        <div class="section-title">基本設定</div>
-        <label>壁の厚さ (cm)</label>
-        <input type="number" id="wallThickness" value="12" min="5" max="30">
-        <label>グリッド刻み (cm)</label>
-        <input type="number" id="gridSize" value="45" min="5" max="200" step="5">
-    </div> 
-
-    <div id="selectedPanel" style="display:none;">
-        <div class="section selected-info">
-            <div class="section-title">選択中</div>
-            <div id="selectedType"></div>
-            <div id="selectedControls"></div>
-            <div class="btn-group" style="margin-top:10px;">
-                <button class="info-btn" id="rotateBtn">🔄</button>
-                <button class="danger-btn" id="deleteBtn">🗑️</button>
+    <div class="drawer-section-title">📍 敷地設定</div>
+    <div class="drawer-content">
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <div style="flex:1;">
+                <label style="font-size:11px;color:#666;">幅 (m)</label>
+                <input type="number" id="landWidthM" value="10.1" min="5" max="100" step="0.1"
+                    style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+            </div>
+            <div style="flex:1;">
+                <label style="font-size:11px;color:#666;">奥行き (m)</label>
+                <input type="number" id="landDepthM" value="10" min="5" max="100" step="0.1"
+                    style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
             </div>
         </div>
-    </div>
-
-    <div class="section">
-        <div class="section-title">面積情報</div>
-        <div class="info-box">
-            <p><strong>総面積:</strong> <span id="totalArea">0.0</span> 畳</p>
-            <p><strong>部屋数:</strong> <span id="roomCount">0</span></p>
-            <p><strong>重なり:</strong> <span id="overlapCount" style="color:#d32f2f;">0</span> 箇所</p>
+        <div class="drawer-grid-2">
+            <button class="action-btn" onclick="setLandMobile()">📍 敷地表示</button>
+            <button class="info-btn" onclick="document.getElementById('clearLandBtn').click();closeDrawer();">✕ 消去</button>
         </div>
     </div>
 
-    <div class="section">
-        <button class="action-btn" id="saveBtn">💾 保存</button>
-        <button class="action-btn" id="loadBtn">📂 読込</button>
-        <button class="action-btn" id="exportBtn">📥 画像</button>
-        <button class="danger-btn" id="clearBtn">🗑️ クリア</button>
+    <div class="drawer-section-title">💾 操作</div>
+    <div class="drawer-content">
+        <div class="drawer-grid-2">
+            <button class="action-btn" onclick="document.getElementById('saveBtn').click();closeDrawer();">💾 保存</button>
+            <button class="action-btn" onclick="document.getElementById('loadBtn').click();closeDrawer();">📂 読込</button>
+            <button class="action-btn" onclick="document.getElementById('exportBtn').click();closeDrawer();">📥 画像出力</button>
+            <button class="info-btn" style="background:#1565c0;"
+                onclick="document.getElementById('comparePlanBtn').click();closeDrawer();">📊 プラン比較</button>
+        </div>
+        <button class="danger-btn" onclick="document.getElementById('clearBtn').click();">🗑️ 全削除</button>
     </div>
+    <div style="height:16px;"></div>
 </div>
-
-<div id="canvas-container">
-    <div id="overlapBadge">⚠️ <span id="overlapBadgeCount">0</span>箇所 重なりあり</div>
-    <div id="fitModeIndicator">🧩 空きフィットモード: クリックして部屋を配置</div>
-    <canvas id="canvas" width="1400" height="1000"></canvas>
-</div>
-<input type="file" id="fileInput" style="display:none;" accept=".json">
 
 <script src="https://cdn.jsdelivr.net/npm/martinez-polygon-clipping@0.7.2/dist/martinez.min.js"></script>
 <script>
@@ -343,20 +645,58 @@ const ctx = canvas.getContext('2d');
 // ===== ローカルストレージ復元 =====
 function loadFromStorage() {
     try {
-        const saved = localStorage.getItem('floorplan_autosave');
+        const saved = localStorage.getItem('floorplan_autosave_v2');
         if (saved) {
             const data = JSON.parse(saved);
-            return {
-                rooms: data.rooms || [], groups: data.groups || [],
-                walls: data.walls || [], doors: data.doors || [],
-                windows: data.windows || [], manikins: data.manikins || [],
-                dimensions: data.dimensions || [], landBoundary: data.landBoundary || null
+            // 新形式（複数プラン）
+            if (data.plans && data.plans.length > 0) {
+                return { plans: data.plans, currentPlanId: data.currentPlanId };
+            }
+        }
+        // 旧形式を読んで1プラン目に変換
+        const oldSaved = localStorage.getItem('floorplan_autosave');
+        if (oldSaved) {
+            const old = JSON.parse(oldSaved);
+            const plan = {
+                id: Date.now(), name: 'プランA',
+                data: {
+                    rooms: old.rooms||[], groups: old.groups||[],
+                    walls: old.walls||[], doors: old.doors||[],
+                    windows: old.windows||[], manikins: old.manikins||[],
+                    dimensions: old.dimensions||[], landBoundary: old.landBoundary||null
+                }
             };
+            return { plans: [plan], currentPlanId: plan.id };
         }
     } catch(e) {}
     return null;
 }
-const savedData = loadFromStorage();
+
+// ===== プラン管理 =====
+let plans = []; // 全プランのリスト [{id, name, data}]
+let currentPlanId = null;
+
+const savedStorage = loadFromStorage();
+
+// プラン初期化
+if (savedStorage?.plans) {
+    plans = savedStorage.plans;
+    currentPlanId = savedStorage.currentPlanId || plans[0].id;
+} else {
+    // 初回起動
+    const firstPlan = { id: Date.now(), name: 'プランA', data: {
+        rooms:[], groups:[], walls:[], doors:[], windows:[],
+        manikins:[], dimensions:[], landBoundary:null
+    }};
+    plans = [firstPlan];
+    currentPlanId = firstPlan.id;
+}
+
+function getCurrentPlanData() {
+    return plans.find(p => p.id === currentPlanId)?.data || plans[0].data;
+}
+
+const savedData = getCurrentPlanData();
 
 let state = {
     rooms: savedData?.rooms || [],
@@ -380,7 +720,7 @@ let state = {
     polygonVertices: [], tempPolygonPos: null,
     // === 重なり関連 ===
     overlapHighlight: true,
-    overlapWarning: true,
+    overlapWarning: false,
     overlapTransparent: true,
     overlappingPairs: [],   // 重なりペア [{roomA, roomB, polygon}]
     // ドラッグ前スナップショット（キャンセル用）
@@ -388,6 +728,8 @@ let state = {
     pendingOverlapCheck: false,
     // フィットモード
     fitMode: false,
+    exportRegion: null,      // {x,y,width,height} world座標
+    exportRegionDrag: null,  // ドラッグ中の一時矩形
     dimTargetRoom: null, // 寸法対象に絞り込んだ部屋ID
 };
 
@@ -657,9 +999,21 @@ function addFurniture(category, index) {
 
 function autoSave() {
     try {
-        const data = { rooms:state.rooms,groups:state.groups,walls:state.walls,doors:state.doors,
-                       windows:state.windows,manikins:state.manikins,dimensions:state.dimensions,landBoundary:state.landBoundary };
-        localStorage.setItem('floorplan_autosave', JSON.stringify(data));
+        // 現在のstateを現プランに書き戻す
+        const current = plans.find(p => p.id === currentPlanId);
+        if (current) {
+            current.data = {
+                rooms: JSON.parse(JSON.stringify(state.rooms)),
+                groups: JSON.parse(JSON.stringify(state.groups)),
+                walls: JSON.parse(JSON.stringify(state.walls)),
+                doors: JSON.parse(JSON.stringify(state.doors)),
+                windows: JSON.parse(JSON.stringify(state.windows)),
+                manikins: JSON.parse(JSON.stringify(state.manikins)),
+                dimensions: JSON.parse(JSON.stringify(state.dimensions)),
+                landBoundary: state.landBoundary ? JSON.parse(JSON.stringify(state.landBoundary)) : null
+            };
+        }
+        localStorage.setItem('floorplan_autosave_v2', JSON.stringify({ plans, currentPlanId }));
     } catch(e) {}
 }
 
@@ -716,10 +1070,12 @@ function redo() {
         updateUndoRedoButtons(); draw();
     }
 }
+
 function updateUndoRedoButtons() {
     const u = document.getElementById('undoBtn'), r = document.getElementById('redoBtn');
-    u.disabled = state.historyIndex <= 0; u.style.opacity = state.historyIndex<=0?'0.5':'1';
-    r.disabled = state.historyIndex >= state.history.length-1; r.style.opacity = state.historyIndex>=state.history.length-1?'0.5':'1';
+    const mu = document.getElementById('mbUndoBtn'), mr = document.getElementById('mbRedoBtn');
+    [u, mu].forEach(b => { if(b) { b.disabled = state.historyIndex <= 0; b.style.opacity = state.historyIndex<=0?'0.5':'1'; }});
+    [r, mr].forEach(b => { if(b) { b.disabled = state.historyIndex >= state.history.length-1; b.style.opacity = state.historyIndex>=state.history.length-1?'0.5':'1'; }});
 }
 
 function isDimensionTool(tool) {
@@ -730,12 +1086,13 @@ function switchToSelectTool() {
     state.selectedTool = 'select';
     document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.classList.remove('active'));
     document.querySelector('.tool-btn[data-tool="select"]').classList.add('active');
+    updateMobileToolbar();
     canvas.style.cursor = 'default';
 }
 function snapToGrid(v) { const g=state.gridSize*0.2; return Math.round(v/g)*g; }
 function snapPointToGrid(p) { return {x:snapToGrid(p.x),y:snapToGrid(p.y)}; }
 
-function snapRoomToNearbyEdges(room, threshold=15) {
+function snapRoomToNearbyEdges(room, threshold=30) {
     const others = state.rooms.filter(r=>r.id!==room.id);
     if (others.length===0) return;
     let bestSnap=null, minDist=threshold;
@@ -868,8 +1225,12 @@ function getDimensionCoords(dim) {
 function resizeCanvas(){
     const container=document.getElementById('canvas-container');
     const rect=container.getBoundingClientRect();
-    if(window.innerWidth<=768){canvas.width=rect.width-20;canvas.height=rect.height-20;}
-    else{canvas.width=1400;canvas.height=1000;}
+    if(window.innerWidth<=768){
+        canvas.width=rect.width>0?rect.width:window.innerWidth;
+        canvas.height=rect.height>0?rect.height:(window.innerHeight-100);
+    } else {
+        canvas.width=1400;canvas.height=1000;
+    }
     draw();
 }
 window.addEventListener('resize',resizeCanvas);
@@ -946,28 +1307,47 @@ function draw() {
 
     // グリッド
     if(state.showGrid){
-        const g=state.gridSize*0.2;
-        ctx.strokeStyle='#e0e0e0'; ctx.lineWidth=0.5/state.zoomLevel;
-        if(state.landBoundary){
-            const{x,y,width,height}=state.landBoundary;
-            for(let lx=x;lx<=x+width;lx+=g){ctx.beginPath();ctx.moveTo(lx,y);ctx.lineTo(lx,y+height);ctx.stroke();}
-            for(let ly=y;ly<=y+height;ly+=g){ctx.beginPath();ctx.moveTo(x,ly);ctx.lineTo(x+width,ly);ctx.stroke();}
-        } else {
-            for(let x=0;x<canvas.width/state.zoomLevel;x+=g){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,canvas.height/state.zoomLevel);ctx.stroke();}
-            for(let y=0;y<canvas.height/state.zoomLevel;y+=g){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width/state.zoomLevel,y);ctx.stroke();}
+        const g = state.gridSize * 0.2;
+        // キャンバス全体の表示範囲をワールド座標で計算
+        const viewLeft   = -state.panOffset.x / state.zoomLevel;
+        const viewTop    = -state.panOffset.y / state.zoomLevel;
+        const viewRight  = viewLeft + canvas.width  / state.zoomLevel;
+        const viewBottom = viewTop  + canvas.height / state.zoomLevel;
+
+        // グリッド開始位置をgの倍数に揃える
+        const startX = Math.floor(viewLeft  / g) * g;
+        const startY = Math.floor(viewTop   / g) * g;
+
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth   = 0.5 / state.zoomLevel;
+        for(let gx = startX; gx <= viewRight;  gx += g){
+            ctx.beginPath(); ctx.moveTo(gx, viewTop); ctx.lineTo(gx, viewBottom); ctx.stroke();
         }
+        for(let gy = startY; gy <= viewBottom; gy += g){
+            ctx.beginPath(); ctx.moveTo(viewLeft, gy); ctx.lineTo(viewRight, gy); ctx.stroke();
+        }
+
+        // 敷地境界線（あれば）
+        if(state.landBoundary){
+            // 敷地内を少し色で区別
+            ctx.fillStyle = 'rgba(255,87,34,0.04)';
+            ctx.fillRect(state.landBoundary.x, state.landBoundary.y,
+                        state.landBoundary.width, state.landBoundary.height);
+        }
+
+        // 畳グリッド（全面）
         if(state.showTatamiGrid){
-            const tg=910*state.scale/1000;
-            ctx.strokeStyle='rgba(255,140,0,0.45)'; ctx.lineWidth=1.2/state.zoomLevel;
-            ctx.setLineDash([6/state.zoomLevel,4/state.zoomLevel]);
-            if(state.landBoundary){
-                const{x,y,width,height}=state.landBoundary;
-                for(let lx=x;lx<=x+width+tg;lx+=tg){ctx.beginPath();ctx.moveTo(lx,y);ctx.lineTo(lx,y+height);ctx.stroke();}
-                for(let ly=y;ly<=y+height+tg;ly+=tg){ctx.beginPath();ctx.moveTo(x,ly);ctx.lineTo(x+width,ly);ctx.stroke();}
-            } else {
-                const cw=canvas.width/state.zoomLevel,ch=canvas.height/state.zoomLevel;
-                for(let x=0;x<=cw;x+=tg){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,ch);ctx.stroke();}
-                for(let y=0;y<=ch;y+=tg){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(cw,y);ctx.stroke();}
+            const tg = 910 * state.scale / 1000;
+            const tStartX = Math.floor(viewLeft  / tg) * tg;
+            const tStartY = Math.floor(viewTop   / tg) * tg;
+            ctx.strokeStyle = 'rgba(255,140,0,0.35)';
+            ctx.lineWidth   = 1.2 / state.zoomLevel;
+            ctx.setLineDash([6 / state.zoomLevel, 4 / state.zoomLevel]);
+            for(let gx = tStartX; gx <= viewRight;  gx += tg){
+                ctx.beginPath(); ctx.moveTo(gx, viewTop); ctx.lineTo(gx, viewBottom); ctx.stroke();
+            }
+            for(let gy = tStartY; gy <= viewBottom; gy += tg){
+                ctx.beginPath(); ctx.moveTo(viewLeft, gy); ctx.lineTo(viewRight, gy); ctx.stroke();
             }
             ctx.setLineDash([]);
         }
@@ -1290,6 +1670,45 @@ function draw() {
         ctx.setLineDash([8/state.zoomLevel,4/state.zoomLevel]); ctx.stroke(); ctx.setLineDash([]);
     }
 
+    // ===== 出力範囲オーバーレイ =====
+    const drawRegion = state.exportRegionDrag || state.exportRegion;
+    if(drawRegion){
+        ctx.save();
+        // 範囲外を暗く
+        ctx.fillStyle='rgba(0,0,0,0.35)';
+        const vl=-state.panOffset.x/state.zoomLevel,
+            vt=-state.panOffset.y/state.zoomLevel,
+            vr=vl+canvas.width/state.zoomLevel,
+            vb=vt+canvas.height/state.zoomLevel;
+        // 上
+        ctx.fillRect(vl,vt,vr-vl,drawRegion.y-vt);
+        // 下
+        ctx.fillRect(vl,drawRegion.y+drawRegion.height,vr-vl,vb-(drawRegion.y+drawRegion.height));
+        // 左
+        ctx.fillRect(vl,drawRegion.y,drawRegion.x-vl,drawRegion.height);
+        // 右
+        ctx.fillRect(drawRegion.x+drawRegion.width,drawRegion.y,vr-(drawRegion.x+drawRegion.width),drawRegion.height);
+        // 枠線
+        ctx.strokeStyle='#2196f3'; ctx.lineWidth=2/state.zoomLevel;
+        ctx.setLineDash([8/state.zoomLevel,4/state.zoomLevel]);
+        ctx.strokeRect(drawRegion.x,drawRegion.y,drawRegion.width,drawRegion.height);
+        ctx.setLineDash([]);
+        // 角ハンドル
+        ctx.fillStyle='#2196f3';
+        [[0,0],[1,0],[1,1],[0,1]].forEach(([hx,hy])=>{
+            ctx.fillRect(drawRegion.x+hx*drawRegion.width-5/state.zoomLevel,
+                        drawRegion.y+hy*drawRegion.height-5/state.zoomLevel,
+                        10/state.zoomLevel,10/state.zoomLevel);
+        });
+        // サイズ表示
+        ctx.fillStyle='#2196f3'; ctx.font=`bold ${13/state.zoomLevel}px sans-serif`;
+        ctx.textAlign='center';
+        const wm=(drawRegion.width/state.scale).toFixed(2)+'m';
+        const hm=(drawRegion.height/state.scale).toFixed(2)+'m';
+        ctx.fillText(wm, drawRegion.x+drawRegion.width/2, drawRegion.y-8/state.zoomLevel);
+        ctx.fillText(hm, drawRegion.x+drawRegion.width+30/state.zoomLevel, drawRegion.y+drawRegion.height/2);
+        ctx.restore();
+    }
     ctx.restore();
     updateUI();
 }
@@ -1298,6 +1717,8 @@ function updateUI(){
     const ta=getTotalArea();
     document.getElementById('totalArea').textContent=ta;
     document.getElementById('totalAreaTop').textContent=ta;
+    const mbArea = document.getElementById('mbTotalArea');
+    if(mbArea) mbArea.textContent = ta;
     document.getElementById('roomCount').textContent=state.rooms.length;
     document.getElementById('scaleDisplay').textContent=Math.round(state.zoomLevel*100);
     const mqa=document.getElementById('multiSelectQuickActions');
@@ -1517,6 +1938,12 @@ canvas.addEventListener('mousedown', e=>{
 
     const f=findItemAt(x,y);
 
+    if(state.selectedTool==='export-region'){
+        state.exportRegionDrag={x,y,width:0,height:0};
+        state._exportStart={x,y};
+        draw(); return;
+    }
+
     if(state.selectedTool==='delete'&&f){
         if(f.type==='room'){state.rooms=state.rooms.filter(r=>r.id!==f.id);state.dimensions=state.dimensions.filter(d=>d.roomId!==f.id);}
         else if(f.type==='wall')state.walls=state.walls.filter(w=>w.id!==f.id);
@@ -1694,6 +2121,15 @@ canvas.addEventListener('mousemove', e=>{
         draw(); return;
     }
 
+    if(state.selectedTool==='export-region'&&state._exportStart){
+        const sx=state._exportStart.x, sy=state._exportStart.y;
+        state.exportRegionDrag={
+            x:Math.min(sx,x), y:Math.min(sy,y),
+            width:Math.abs(x-sx), height:Math.abs(y-sy)
+        };
+        draw(); return;
+    }
+
     if(!state.isDragging&&state.dragStart&&!state.isPanning){
         const clientX=e.clientX,clientY=e.clientY;
         const sx=(state.dragStart.x*state.zoomLevel)+state.panOffset.x+rect.left;
@@ -1710,6 +2146,14 @@ canvas.addEventListener('mousemove', e=>{
         state.panOffset.x+=e.clientX-state.dragStart.x;
         state.panOffset.y+=e.clientY-state.dragStart.y;
         state.dragStart={x:e.clientX,y:e.clientY}; draw(); return;
+    }
+    if(state.selectedTool==='export-region'&&state._exportStart){
+        const sx=state._exportStart.x, sy=state._exportStart.y;
+        state.exportRegionDrag={
+            x:Math.min(sx,x), y:Math.min(sy,y),
+            width:Math.abs(x-sx), height:Math.abs(y-sy)
+        };
+        draw(); return;
     }
     if(state.selectedTool==='wall'&&state.wallStartVertex){ state.tempWallEndPos=findNearestVertex(x,y,15)||snapPointToGrid({x,y}); draw(); return; }
     if(isDimensionTool(state.selectedTool)&&state.dimensionStart){ state.tempDimensionEnd={x,y}; draw(); return; }
@@ -1775,7 +2219,10 @@ canvas.addEventListener('mousemove', e=>{
             const dx=x-state.dragStart.x,dy=y-state.dragStart.y;
             const r=state.rooms.find(rm=>rm.id===state.selectedItem.id);
             if(r){r.vertices=r.vertices.map(v=>({x:v.x+dx,y:v.y+dy}));state.selectedItem=r;}
-            state.dragStart={x,y}; draw();
+            state.dragStart={x,y};
+            // ドラッグ中は重なり検出しない（離した時に確定）
+            state.overlappingPairs=[];
+            draw();
         } else if(state.selectedItem&&state.selectedItem.type==='wall'&&state.selectedTool==='select'){
             const dx=x-state.dragStart.x,dy=y-state.dragStart.y;
             state.selectedItem.x1+=dx;state.selectedItem.y1+=dy;state.selectedItem.x2+=dx;state.selectedItem.y2+=dy;
@@ -1804,19 +2251,28 @@ canvas.addEventListener('mousemove', e=>{
 });
 
 canvas.addEventListener('mouseup', ()=>{
+    if(state.selectedTool==='export-region'&&state.exportRegionDrag){
+        if(state.exportRegionDrag.width>10&&state.exportRegionDrag.height>10){
+            state.exportRegion=state.exportRegionDrag;
+        }
+        state.exportRegionDrag=null;
+        state._exportStart=null;
+        draw(); return;
+    }    
     if(state.isDragging){
         if(state.selectedItem&&state.selectedItem.type==='room'){
             const r=state.rooms.find(rm=>rm.id===state.selectedItem.id);
-            if(r){ snapRoomToNearbyEdges(r); r.vertices=r.vertices.map(v=>snapPointToGrid(v)); }
-            // 重なり確認
+            if(r){
+                // まず辺スナップを試みる（重なっていない場合のみ適用）
+                const snapCandidate=JSON.parse(JSON.stringify(r.vertices));
+                snapRoomToNearbyEdges(r);
+                // スナップ後に重なりが生じたら辺スナップをキャンセル
+                const afterSnapOverlap=state.rooms.filter(other=>other.id!==r.id&&polygonsIntersect(r.vertices,other.vertices));
+                if(afterSnapOverlap.length>0){ r.vertices=snapCandidate; }
+                r.vertices=r.vertices.map(v=>snapPointToGrid(v));
+            }
             detectAllOverlaps(); updateOverlapBadge();
-            const overlapping=state.overlappingPairs.filter(p=>p.roomAId===state.selectedItem.id||p.roomBId===state.selectedItem.id);
-            if(overlapping.length>0&&state.overlapWarning&&state.preDragSnapshot){
-                showOverlapDialog('移動した部屋が他の部屋と重なっています。どうしますか？',state.selectedItem.id);
-                state.isDragging=false; state.isPanning=false;
-                state.selectedVertex=null; state.selectedEdge=null; state.edgeNormal=null; state.dragStart=null;
-                canvas.style.cursor='default'; return;
-            } else { saveHistory(); draw(); }
+            saveHistory(); draw();
         } else if(state.isDraggingDoorWindow){ saveHistory(); }
         else if(state.selectedVertex&&state.selectedVertex.roomId&&state.selectedTool==='select'){ saveHistory(); }
         else if(state.selectedItem&&state.selectedItem.type!=='door'&&state.selectedItem.type!=='window'){ saveHistory(); }
@@ -1842,6 +2298,7 @@ document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{
         document.getElementById('fitModeBtn').style.background='#e3f2fd';
         document.getElementById('fitModeBtn').style.color='#1565c0';
         document.getElementById('fitModeIndicator').style.display='none';
+        state.exportRegionDrag=null; state._exportStart=null;
         canvas.style.cursor=state.selectedTool==='add-vertex'?'crosshair':'default';
         updateDimRoomSelector();
         draw();
@@ -1939,18 +2396,28 @@ document.getElementById('fileInput').addEventListener('change',e=>{
 });
 
 document.getElementById('exportBtn').addEventListener('click',()=>{
-    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-    if(state.landBoundary){minX=Math.min(minX,state.landBoundary.x);minY=Math.min(minY,state.landBoundary.y);maxX=Math.max(maxX,state.landBoundary.x+state.landBoundary.width);maxY=Math.max(maxY,state.landBoundary.y+state.landBoundary.height);}
-    state.rooms.forEach(r=>r.vertices.forEach(v=>{minX=Math.min(minX,v.x);minY=Math.min(minY,v.y);maxX=Math.max(maxX,v.x);maxY=Math.max(maxY,v.y);}));
-    state.walls.forEach(w=>{minX=Math.min(minX,w.x1,w.x2);minY=Math.min(minY,w.y1,w.y2);maxX=Math.max(maxX,w.x1,w.x2);maxY=Math.max(maxY,w.y1,w.y2);});
-    if(minX===Infinity){alert('何も描画されていません');return;}
-    const margin=50;
-    const eb={x:minX-margin,y:minY-margin,width:(maxX-minX)+margin*2,height:(maxY-minY)+margin*2};
+    let eb;
+    if(state.exportRegion){
+        const r=state.exportRegion;
+        eb={x:r.x, y:r.y, width:r.width, height:r.height};
+    } else {
+        // 従来：全体範囲
+        let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+        if(state.landBoundary){minX=Math.min(minX,state.landBoundary.x);minY=Math.min(minY,state.landBoundary.y);maxX=Math.max(maxX,state.landBoundary.x+state.landBoundary.width);maxY=Math.max(maxY,state.landBoundary.y+state.landBoundary.height);}
+        state.rooms.forEach(r=>r.vertices.forEach(v=>{minX=Math.min(minX,v.x);minY=Math.min(minY,v.y);maxX=Math.max(maxX,v.x);maxY=Math.max(maxY,v.y);}));
+        state.walls.forEach(w=>{minX=Math.min(minX,w.x1,w.x2);minY=Math.min(minY,w.y1,w.y2);maxX=Math.max(maxX,w.x1,w.x2);maxY=Math.max(maxY,w.y1,w.y2);});
+        if(minX===Infinity){alert('何も描画されていません');return;}
+        const margin=50;
+        eb={x:minX-margin,y:minY-margin,width:(maxX-minX)+margin*2,height:(maxY-minY)+margin*2};
+    }
+    if(eb.width<1||eb.height<1){alert('範囲が小さすぎます');return;}
+
     const tc=document.createElement('canvas');
-    tc.width=eb.width; tc.height=eb.height;
+    tc.width=Math.round(eb.width); tc.height=Math.round(eb.height);
     const tx=tc.getContext('2d');
     tx.fillStyle='white'; tx.fillRect(0,0,tc.width,tc.height);
     tx.save(); tx.translate(-eb.x,-eb.y);
+    // 部屋
     state.rooms.forEach(r=>{
         tx.fillStyle=r.color||'#e3f2fd';
         tx.beginPath(); tx.moveTo(r.vertices[0].x,r.vertices[0].y);
@@ -1963,6 +2430,45 @@ document.getElementById('exportBtn').addEventListener('click',()=>{
         tx.font='14px sans-serif'; tx.fillText(calculateTatamiFromArea(calculatePolygonArea(r.vertices))+'畳',c.x,c.y+5);
         if(r.purpose){tx.font='12px sans-serif';tx.fillStyle='#666';tx.fillText(r.purpose,c.x,c.y+22);}
     });
+    // 壁
+    state.walls.forEach(w=>{
+        tx.strokeStyle='#333'; tx.lineWidth=w.thickness; tx.lineCap='square';
+        tx.beginPath(); tx.moveTo(w.x1,w.y1); tx.lineTo(w.x2,w.y2); tx.stroke();
+    });
+    // 寸法線
+    state.dimensions.forEach(dim=>{
+        const coords=getDimensionCoords(dim); if(!coords) return;
+        const{p1,p2}=coords;
+        const offset=dim.offset||-40, dimType=dim.dimType||'h';
+        let ox1,oy1,ox2,oy2,length,angle;
+        if(dimType==='h'){const dimY=(p1.y+p2.y)/2+offset;ox1=p1.x;oy1=dimY;ox2=p2.x;oy2=dimY;length=Math.abs(p2.x-p1.x);angle=0;}
+        else if(dimType==='v'){const dimX=(p1.x+p2.x)/2+offset;ox1=dimX;oy1=p1.y;ox2=dimX;oy2=p2.y;length=Math.abs(p2.y-p1.y);angle=Math.PI/2;}
+        else{const ea=dim.edgeAngle||0,eDx=Math.cos(ea),eDy=Math.sin(ea),nx=-eDy,ny=eDx;const midPerp=((p1.x*nx+p1.y*ny)+(p2.x*nx+p2.y*ny))/2;const dimPerp=midPerp+offset;const par1=p1.x*eDx+p1.y*eDy,par2=p2.x*eDx+p2.y*eDy;ox1=eDx*par1+nx*dimPerp;oy1=eDy*par1+ny*dimPerp;ox2=eDx*par2+nx*dimPerp;oy2=eDy*par2+ny*dimPerp;length=Math.abs(par2-par1);angle=ea;}
+        if(length<0.1) return;
+        tx.strokeStyle='#666'; tx.lineWidth=1;
+        tx.setLineDash([3,3]); tx.beginPath(); tx.moveTo(p1.x,p1.y); tx.lineTo(ox1,oy1); tx.stroke();
+        tx.beginPath(); tx.moveTo(p2.x,p2.y); tx.lineTo(ox2,oy2); tx.stroke(); tx.setLineDash([]);
+        tx.lineWidth=1.5; tx.beginPath(); tx.moveTo(ox1,oy1); tx.lineTo(ox2,oy2); tx.stroke();
+        const as=6; tx.beginPath();
+        tx.moveTo(ox1,oy1); tx.lineTo(ox1+as*Math.cos(angle+Math.PI*0.85),oy1+as*Math.sin(angle+Math.PI*0.85));
+        tx.moveTo(ox1,oy1); tx.lineTo(ox1+as*Math.cos(angle-Math.PI*0.85),oy1+as*Math.sin(angle-Math.PI*0.85));
+        tx.moveTo(ox2,oy2); tx.lineTo(ox2-as*Math.cos(angle+Math.PI*0.85),oy2-as*Math.sin(angle+Math.PI*0.85));
+        tx.moveTo(ox2,oy2); tx.lineTo(ox2-as*Math.cos(angle-Math.PI*0.85),oy2-as*Math.sin(angle-Math.PI*0.85));
+        tx.stroke();
+        const mx=(ox1+ox2)/2,my=(oy1+oy2)/2;
+        tx.save(); tx.translate(mx,my); tx.rotate(angle);
+        const text=formatLength(length);
+        tx.font='bold 12px sans-serif'; tx.textAlign='center'; tx.textBaseline='middle';
+        const met=tx.measureText(text);
+        tx.fillStyle='white'; tx.fillRect(-met.width/2-3,-7,met.width+6,14);
+        tx.fillStyle='#333'; tx.fillText(text,0,0); tx.restore();
+    });
+    // 敷地境界
+    if(state.landBoundary){
+        tx.strokeStyle='#ff5722'; tx.lineWidth=3;
+        tx.setLineDash([10,5]); tx.strokeRect(state.landBoundary.x,state.landBoundary.y,state.landBoundary.width,state.landBoundary.height);
+        tx.setLineDash([]);
+    }
     tx.restore();
     const a=document.createElement('a'); a.download='間取り_'+new Date().toISOString().slice(0,10)+'.png';
     a.href=tc.toDataURL(); a.click();
@@ -2040,64 +2546,128 @@ document.getElementById('groupBtnQuick').addEventListener('click',handleGroup);
 document.getElementById('ungroupBtnQuick').addEventListener('click',handleUngroup);
 
 // ===== タッチ操作 =====
-let lastTouchEnd=0,lastDistance=0;
+let lastTouchEnd=0;
+let pinchStartDist=0, pinchStartZoom=0;
+let pinchStartCx=0, pinchStartCy=0;
+let pinchStartPanX=0, pinchStartPanY=0;
+let isPinching=false;
+
 canvas.addEventListener('touchstart',e=>{
-    if(e.touches.length===2){
-        e.preventDefault();
-        const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
-        lastDistance=Math.sqrt(dx*dx+dy*dy);
-        state.isPanning=false; // ピンチ中はパンを無効化
+    e.preventDefault();
+    if(e.touches.length>=2){
+        // 2本指開始
+        isPinching=true;
+        state.isPanning=false;
+        state.isDragging=false;
+        state.dragStart=null;
+        const t0=e.touches[0], t1=e.touches[1];
+        const dx=t0.clientX-t1.clientX, dy=t0.clientY-t1.clientY;
+        pinchStartDist=Math.sqrt(dx*dx+dy*dy);
+        pinchStartZoom=state.zoomLevel;
+        pinchStartCx=(t0.clientX+t1.clientX)/2;
+        pinchStartCy=(t0.clientY+t1.clientY)/2;
+        pinchStartPanX=state.panOffset.x;
+        pinchStartPanY=state.panOffset.y;
+        return;
     }
-    else if(e.touches.length===1){
-        e.preventDefault();
-        const touch=e.touches[0],rect=canvas.getBoundingClientRect();
+    if(e.touches.length===1){
+        if(isPinching) return;
+        const touch=e.touches[0];
+        const rect=canvas.getBoundingClientRect();
         const x=((touch.clientX-rect.left)-state.panOffset.x)/state.zoomLevel;
         const y=((touch.clientY-rect.top)-state.panOffset.y)/state.zoomLevel;
         const f=findItemAt(x,y);
-        if(!f&&state.selectedTool==='select'){state.isPanning=true;state.dragStart={x:touch.clientX,y:touch.clientY};}
-        else{canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:touch.clientX,clientY:touch.clientY,bubbles:true}));}
+        // pan/selectツールで何もない場所 → パン
+        if(state.selectedTool==='pan'){
+            state.isPanning=true;
+            state.dragStart={x:touch.clientX,y:touch.clientY};
+        } else if(state.selectedTool==='select'&&!f){
+            state.isPanning=true;
+            state.dragStart={x:touch.clientX,y:touch.clientY};
+        } else if(state.selectedTool!=='pan'){
+            // 描画系ツールのみmousedownを発火
+            canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:touch.clientX,clientY:touch.clientY,bubbles:true}));
+        }
     }
 },{passive:false});
 
 canvas.addEventListener('touchmove',e=>{
     e.preventDefault();
-    if(e.touches.length===2){
-        const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
+    if(e.touches.length>=2){
+        if(!isPinching) return;
+        const t0=e.touches[0], t1=e.touches[1];
+        const dx=t0.clientX-t1.clientX, dy=t0.clientY-t1.clientY;
         const dist=Math.sqrt(dx*dx+dy*dy);
-        if(lastDistance>0 && Math.abs(dist-lastDistance)<100){ // 急激な変化を防ぐ
-            state.zoomLevel=Math.max(0.3,Math.min(3.0,state.zoomLevel+(dist-lastDistance)*0.01));
-        }
-        lastDistance=dist; draw(); return; // 2本指の場合はここで終了
-    } else if(e.touches.length===1){
+        const cx=(t0.clientX+t1.clientX)/2;
+        const cy=(t0.clientY+t1.clientY)/2;
+        const rect=canvas.getBoundingClientRect();
+
+        // パン：開始中心点からの移動量
+        const panDx=cx-pinchStartCx;
+        const panDy=cy-pinchStartCy;
+
+        // 2本指は常にパンのみ（ズームなし）
+        state.panOffset.x=pinchStartPanX+panDx;
+        state.panOffset.y=pinchStartPanY+panDy;
+        draw();
+        return;
+    }
+    if(e.touches.length===1){
+        if(isPinching) return;
         const touch=e.touches[0];
-        if(state.isPanning){state.panOffset.x+=touch.clientX-state.dragStart.x;state.panOffset.y+=touch.clientY-state.dragStart.y;state.dragStart={x:touch.clientX,y:touch.clientY};draw();}
-        else canvas.dispatchEvent(new MouseEvent('mousemove',{clientX:touch.clientX,clientY:touch.clientY,bubbles:true}));
+        if(state.isPanning && state.dragStart){
+            state.panOffset.x+=touch.clientX-state.dragStart.x;
+            state.panOffset.y+=touch.clientY-state.dragStart.y;
+            state.dragStart={x:touch.clientX,y:touch.clientY};
+            draw();
+        } else if(state.isDragging){
+            canvas.dispatchEvent(new MouseEvent('mousemove',{clientX:touch.clientX,clientY:touch.clientY,bubbles:true}));
+        }
     }
 },{passive:false});
+
+canvas.addEventListener('touchcancel',e=>{
+    isPinching=false;
+    state.isPanning=false;
+    state.isDragging=false;
+    state.dragStart=null;
+});
 
 canvas.addEventListener('touchend',e=>{
     e.preventDefault();
-    lastDistance=0; // ピンチ距離をリセット
     if(e.touches.length===0){
-        // 全指を離した時のみmouseupを発行
+        // 全指離れた
+        if(isPinching){
+            isPinching=false;
+            state.isPanning=false;
+            draw();
+            return;
+        }
         const now=Date.now();
         if(now-lastTouchEnd<=300 && e.changedTouches.length===1){
-            state.zoomLevel=1.0; draw();
+            state.zoomLevel=1.5;
+            state.panOffset={x:0,y:0};
+            draw();
         }
         lastTouchEnd=now;
-        if(!state.isDragging){ // ドラッグ中でなければmouseupを発行
+        if(!state.isDragging){
             canvas.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
         }
+        state.isPanning=false;
+        state.dragStart=null;
+    } else if(e.touches.length===1){
+        // 2本→1本になった
+        isPinching=false;
+        state.isPanning=false;
+        state.dragStart=null;
     }
-    state.isPanning=false;
 },{passive:false});
-
 document.addEventListener('keydown',e=>{
     if(e.key==='Delete'&&state.selectedItem)document.getElementById('deleteBtn').click();
     else if(e.key==='r'&&(state.selectedItem||state.multiSelectedRooms.length>0))document.getElementById('rotateBtn').click();
     else if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){e.preventDefault();undo();}
     else if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.key==='z'&&e.shiftKey))){e.preventDefault();redo();}
-    else if(e.key==='Escape'){ state.fitMode=false; fitModePreview=null; document.getElementById('fitModeBtn').style.background='#e3f2fd'; document.getElementById('fitModeBtn').style.color='#1565c0'; document.getElementById('fitModeIndicator').style.display='none';state.dimensionStart=null;state.dimTargetRoom = null;updateDimRoomSelector();state.tempDimensionEnd=null; draw(); }
+    else if(e.key==='Escape'){ state.fitMode=false; fitModePreview=null; document.getElementById('fitModeBtn').style.background='#e3f2fd'; document.getElementById('fitModeBtn').style.color='#1565c0'; document.getElementById('fitModeIndicator').style.display='none';state.exportRegion=null; state.exportRegionDrag=null; state._exportStart=null;state.dimensionStart=null;state.dimTargetRoom = null;updateDimRoomSelector();state.tempDimensionEnd=null; draw(); }
 });
 
 document.getElementById('undoBtn').addEventListener('click',undo);
@@ -2153,10 +2723,297 @@ updateOverlapBadge();
 saveHistory();
 draw();
 
+// ===== モバイル用関数 =====
+function toggleDrawer() {
+    const drawer = document.getElementById('mobileDrawer');
+    const overlay = document.getElementById('drawerOverlay');
+    if(drawer.classList.contains('open')) {
+        drawer.classList.remove('open');
+        overlay.classList.remove('show');
+    } else {
+        renderMobileFurniture(document.getElementById('furnitureCategoryM').value);
+        drawer.classList.add('open');
+        overlay.classList.add('show');
+    }
+}
+function closeDrawer() {
+    document.getElementById('mobileDrawer').classList.remove('open');
+    document.getElementById('drawerOverlay').classList.remove('show');
+}
+function mbSetTool(toolName) {
+    // 既存のtool-btnクリックと同じ処理をtoolNameで呼ぶ
+    const btn = document.querySelector(`.tool-btn[data-tool="${toolName}"]`);
+    if(btn) btn.click();
+    updateMobileToolbar();
+}
+function updateMobileToolbar() {
+    ['select','pan','room','delete'].forEach(t => {
+        const btn = document.getElementById('mb-' + t);
+        if(btn) btn.classList.toggle('active', state.selectedTool === t);
+    });
+}
+function renderMobileFurniture(category) {
+    const items = furnitureLibrary[category] || [];
+    document.getElementById('mobileFurnitureList').innerHTML = items.map((item, idx) =>
+        `<button style="padding:10px 4px;font-size:11px;border-radius:8px;border:1px solid #ddd;background:#f9f9f9;cursor:pointer;"
+            onclick="addFurniture('${category}',${idx});closeDrawer();">
+            ${item.icon}<br>${item.name}
+        </button>`
+    ).join('');
+}
+function setLandMobile() {
+    const w = parseFloat(document.getElementById('landWidthM').value);
+    const d = parseFloat(document.getElementById('landDepthM').value);
+    if(w && d && w > 0 && d > 0) {
+        state.landBoundary = {x:50, y:50, width:w*state.scale, height:d*state.scale};
+        saveHistory(); draw(); closeDrawer();
+    } else alert('正しい数値を入力してください');
+}
+
+// mbUndoBtn/mbRedoBtn のイベント
+document.getElementById('mbUndoBtn').addEventListener('click', undo);
+document.getElementById('mbRedoBtn').addEventListener('click', redo);
+
 window.addEventListener('beforeunload',autoSave);
 window.addEventListener('pagehide',autoSave);
 window.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')autoSave();});
 setInterval(autoSave,30000);
+
+// ===== プランタブ UI =====
+function renderPlanTabs() {
+    const container = document.getElementById('planTabs');
+    container.innerHTML = '';
+    plans.forEach(plan => {
+        const tab = document.createElement('div');
+        tab.className = 'plan-tab' + (plan.id === currentPlanId ? ' active' : '');
+        tab.innerHTML = `
+            <input class="plan-tab-name" value="${plan.name}" 
+                title="ダブルクリックで名前変更" readonly
+                style="width:${Math.max(40, plan.name.length * 10)}px">
+            <span class="tab-close" title="削除">✕</span>
+        `;
+        // タブクリックでプラン切り替え
+        tab.addEventListener('mousedown', e => {
+            if(e.target.classList.contains('tab-close')) return;
+            if(e.target.classList.contains('plan-tab-name') && plan.id === currentPlanId) return;
+            switchPlan(plan.id);
+        });
+        // 名前ダブルクリックで編集
+        const nameInput = tab.querySelector('.plan-tab-name');
+        nameInput.addEventListener('dblclick', () => {
+            nameInput.removeAttribute('readonly');
+            nameInput.focus(); nameInput.select();
+        });
+        nameInput.addEventListener('blur', () => {
+            plan.name = nameInput.value || plan.name;
+            nameInput.setAttribute('readonly', true);
+            autoSave();
+        });
+        nameInput.addEventListener('keydown', e => {
+            if(e.key === 'Enter') nameInput.blur();
+        });
+        // 閉じるボタン
+        tab.querySelector('.tab-close').addEventListener('click', e => {
+            e.stopPropagation();
+            deletePlan(plan.id);
+        });
+        container.appendChild(tab);
+    });
+}
+
+function switchPlan(planId) {
+    // 現プランのstateを保存
+    autoSave();
+    currentPlanId = planId;
+    const data = getCurrentPlanData();
+    // stateにロード
+    state.rooms      = JSON.parse(JSON.stringify(data.rooms      || []));
+    state.groups     = JSON.parse(JSON.stringify(data.groups     || []));
+    state.walls      = JSON.parse(JSON.stringify(data.walls      || []));
+    state.doors      = JSON.parse(JSON.stringify(data.doors      || []));
+    state.windows    = JSON.parse(JSON.stringify(data.windows    || []));
+    state.manikins   = JSON.parse(JSON.stringify(data.manikins   || []));
+    state.dimensions = JSON.parse(JSON.stringify(data.dimensions || []));
+    state.landBoundary = data.landBoundary ? JSON.parse(JSON.stringify(data.landBoundary)) : null;
+    state.selectedItem = null; state.selectedVertex = null; state.selectedEdge = null;
+    state.multiSelectedRooms = [];
+    state.history = []; state.historyIndex = -1;
+    detectAllOverlaps(); updateOverlapBadge();
+    saveHistory();
+    renderPlanTabs();
+    draw();
+}
+
+function addPlan() {
+    autoSave();
+    const names = ['A','B','C','D','E','F','G','H'];
+    const name = 'プラン' + (names[plans.length] || plans.length + 1);
+    const newPlan = { id: Date.now(), name, data: {
+        rooms:[], groups:[], walls:[], doors:[], windows:[],
+        manikins:[], dimensions:[], landBoundary:
+            state.landBoundary ? JSON.parse(JSON.stringify(state.landBoundary)) : null
+    }};
+    plans.push(newPlan);
+    switchPlan(newPlan.id);
+}
+
+function deletePlan(planId) {
+    if(plans.length <= 1){ alert('最後のプランは削除できません'); return; }
+    if(!confirm('このプランを削除しますか？')){ return; }
+    const idx = plans.findIndex(p => p.id === planId);
+    plans.splice(idx, 1);
+    const nextId = plans[Math.max(0, idx - 1)].id;
+    switchPlan(nextId);
+}
+
+function duplicatePlan(planId) {
+    autoSave();
+    const src = plans.find(p => p.id === planId);
+    if(!src) return;
+    const newPlan = {
+        id: Date.now(),
+        name: src.name + '（コピー）',
+        data: JSON.parse(JSON.stringify(src.data))
+    };
+    const idx = plans.findIndex(p => p.id === planId);
+    plans.splice(idx + 1, 0, newPlan);
+    switchPlan(newPlan.id);
+}
+
+// タブ右クリックで複製メニュー
+document.getElementById('planTabs').addEventListener('contextmenu', e => {
+    e.preventDefault();
+    // タブ要素を探す
+    let el = e.target;
+    while(el && !el.classList.contains('plan-tab')) el = el.parentElement;
+    if(!el) return;
+    const nameInput = el.querySelector('.plan-tab-name');
+    if(!nameInput) return;
+    const plan = plans.find(p => p.name === nameInput.value);
+    if(!plan) return;
+    // 簡易コンテキストメニュー
+    const menu = document.createElement('div');
+    menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;
+        background:white;border:1px solid #ddd;border-radius:8px;
+        box-shadow:0 4px 20px rgba(0,0,0,0.15);z-index:9999;overflow:hidden;min-width:160px;`;
+    menu.innerHTML = `
+        <div class="ctx-item" id="_dup">📋 このプランを複製</div>
+        <div class="ctx-separator"></div>
+        <div class="ctx-item danger" id="_del">🗑️ このプランを削除</div>
+    `;
+    document.body.appendChild(menu);
+    menu.querySelector('#_dup').addEventListener('click', () => { duplicatePlan(plan.id); document.body.removeChild(menu); });
+    menu.querySelector('#_del').addEventListener('click', () => { deletePlan(plan.id); document.body.removeChild(menu); });
+    setTimeout(() => document.addEventListener('click', () => { if(document.body.contains(menu)) document.body.removeChild(menu); }, {once:true}), 0);
+});
+
+document.getElementById('addPlanBtn').addEventListener('click', addPlan);
+
+// 初回タブ描画
+renderPlanTabs();
+
+// ===== 面積比較パネル =====
+const PLAN_COLORS = ['#1565c0','#c62828','#2e7d32','#f57f17','#6a1b9a','#00695c','#4e342e','#37474f'];
+
+function openComparePanel() {
+    autoSave();
+    const panel = document.getElementById('comparePanel');
+    const overlay = document.getElementById('compareOverlay');
+    const rowsEl = document.getElementById('compareRows');
+
+    // 全プランの総面積を計算
+    const planAreas = plans.map((plan, idx) => {
+        const rooms = plan.id === currentPlanId
+            ? state.rooms
+            : (plan.data?.rooms || []);
+        const total = rooms.reduce((s, r) => {
+            let area = 0;
+            const vs = r.vertices;
+            for (let i = 0; i < vs.length; i++) {
+                const j = (i+1) % vs.length;
+                area += vs[i].x * vs[j].y - vs[j].x * vs[i].y;
+            }
+            return s + Math.abs(area / 2);
+        }, 0);
+        const tatami = (total / (state.scale * state.scale) / 1.6562).toFixed(1);
+        const sqm = (total / (state.scale * state.scale)).toFixed(2);
+        return { plan, tatami: parseFloat(tatami), sqm, color: PLAN_COLORS[idx % PLAN_COLORS.length], roomCount: rooms.length };
+    });
+
+    const maxTatami = Math.max(...planAreas.map(p => p.tatami), 0.1);
+
+    rowsEl.innerHTML = planAreas.map(pa => {
+        const isCurrent = pa.plan.id === currentPlanId;
+        const barWidth = Math.round((pa.tatami / maxTatami) * 100);
+        return `
+        <div class="compare-row" style="${isCurrent ? 'background:#e3f2fd;border-radius:6px;padding:10px 8px;' : ''}">
+            <div>
+                <span style="display:inline-block;width:10px;height:10px;background:${pa.color};border-radius:50%;margin-right:4px;"></span>
+                <strong>${pa.plan.name}</strong>
+                ${isCurrent ? '<span style="font-size:10px;background:#1565c0;color:white;padding:1px 5px;border-radius:8px;margin-left:4px;">現在</span>' : ''}
+                <div style="font-size:11px;color:#888;margin-top:2px;">${pa.roomCount}部屋 / ${pa.sqm}㎡</div>
+            </div>
+            <div>
+                <div class="compare-bar-wrap">
+                    <div class="compare-bar" style="width:${barWidth}%;background:${pa.color};">${pa.tatami}畳</div>
+                </div>
+                <div style="font-size:12px;color:#333;margin-top:2px;font-weight:bold;">${pa.tatami} 畳</div>
+            </div>
+            <div>
+                ${isCurrent ? '<span style="color:#888;font-size:11px;">（現在のプラン）</span>' : 
+                  `<button class="compare-copy-btn" onclick="copyRoomsFromPlan(${pa.plan.id})">📋 部屋をコピー</button>`}
+            </div>
+        </div>`;
+    }).join('');
+
+    panel.style.display = 'block';
+    overlay.style.display = 'block';
+}
+
+function closeComparePanel() {
+    document.getElementById('comparePanel').style.display = 'none';
+    document.getElementById('compareOverlay').style.display = 'none';
+}
+
+// 指定プランの全部屋を現プランにコピー
+function copyRoomsFromPlan(srcPlanId) {
+    const srcPlan = plans.find(p => p.id === srcPlanId);
+    if (!srcPlan) return;
+    const srcRooms = srcPlanId === currentPlanId ? state.rooms : (srcPlan.data?.rooms || []);
+    if (srcRooms.length === 0) { alert('コピー元に部屋がありません'); return; }
+
+    const mode = confirm(
+        `「${srcPlan.name}」の部屋 ${srcRooms.length}個を現プランにコピーします。\n\n` +
+        `OK → 現プランに追加（重ねて配置）\nキャンセル → 中止`
+    );
+    if (!mode) return;
+
+    // 少しオフセットして貼り付け（重ならないよう）
+    const offsetX = 20, offsetY = 20;
+    const now = Date.now();
+    const copied = srcRooms.map((r, i) => ({
+        ...JSON.parse(JSON.stringify(r)),
+        id: now + i,
+        name: r.name + '（コピー）',
+        vertices: r.vertices.map(v => ({ x: v.x + offsetX, y: v.y + offsetY }))
+    }));
+
+    state.rooms.push(...copied);
+    state.multiSelectedRooms = copied.map(r => r.id);
+    state.selectedTool = 'multi-select';
+    document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+    document.querySelector('.tool-btn[data-tool="multi-select"]').classList.add('active');
+
+    detectAllOverlaps(); updateOverlapBadge();
+    saveHistory(); draw();
+    closeComparePanel();
+    alert(`${copied.length}個の部屋をコピーしました。複数選択モードで選択中です。`);
+}
+
+document.getElementById('comparePlanBtn').addEventListener('click', openComparePanel);
+document.getElementById('comparePanelClose').addEventListener('click', closeComparePanel);
+document.getElementById('compareOverlay').addEventListener('click', closeComparePanel);
+
 </script>
 </body>
 </html>
