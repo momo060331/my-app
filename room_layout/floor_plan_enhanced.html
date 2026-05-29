@@ -2550,9 +2550,12 @@ let lastTouchEnd=0,lastDistance=0;
 canvas.addEventListener('touchstart',e=>{
     if(e.touches.length===2){
         e.preventDefault();
+        // ピンチ開始: ドラッグ・パン状態をリセット
+        state.isDragging=false;
+        state.isPanning=false;
+        state.dragStart=null;
         const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;
         lastDistance=Math.sqrt(dx*dx+dy*dy);
-        state.isPanning=false; // ピンチ中はパンを無効化
     }
     else if(e.touches.length===1){
         e.preventDefault();
@@ -2560,8 +2563,15 @@ canvas.addEventListener('touchstart',e=>{
         const x=((touch.clientX-rect.left)-state.panOffset.x)/state.zoomLevel;
         const y=((touch.clientY-rect.top)-state.panOffset.y)/state.zoomLevel;
         const f=findItemAt(x,y);
-        if(!f&&state.selectedTool==='select'){state.isPanning=true;state.dragStart={x:touch.clientX,y:touch.clientY};}
-        else{canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:touch.clientX,clientY:touch.clientY,bubbles:true}));}
+        // パンはselect/pan/寸法以外の何もない場所のみ
+        const isPanTool = state.selectedTool==='pan';
+        const isSelectEmpty = state.selectedTool==='select' && !f;
+        if(isPanTool || isSelectEmpty){
+            state.isPanning=true;
+            state.dragStart={x:touch.clientX,y:touch.clientY};
+        } else {
+            canvas.dispatchEvent(new MouseEvent('mousedown',{clientX:touch.clientX,clientY:touch.clientY,bubbles:true}));
+        }
     }
 },{passive:false});
 
@@ -2583,16 +2593,23 @@ canvas.addEventListener('touchmove',e=>{
 
 canvas.addEventListener('touchend',e=>{
     e.preventDefault();
-    lastDistance=0; // ピンチ距離をリセット
     if(e.touches.length===0){
-        // 全指を離した時のみmouseupを発行
+        // 全指を離した時のみ
+        lastDistance=0;
         const now=Date.now();
         if(now-lastTouchEnd<=300 && e.changedTouches.length===1){
             state.zoomLevel=1.0; draw();
         }
         lastTouchEnd=now;
-        // isDraggingに関わらず常にmouseupを発行
-        canvas.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+        if(state.isDragging){
+            // ドラッグ中だった場合はmouseupで確定処理を走らせる
+            canvas.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+        } else if(!state.isPanning){
+            canvas.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+        }
+    } else {
+        // 2本→1本になった時はピンチ終了としてリセットのみ
+        lastDistance=0;
     }
     state.isPanning=false;
 },{passive:false});
