@@ -1730,7 +1730,7 @@ function updateUI(){
     const cid=document.getElementById('selectedPanel').dataset.selectedId;
     const nid=state.selectedItem?state.selectedItem.id:null;
     const isInputFocused = document.activeElement && ['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName);
-    if(state.selectedItem&&(cid!==String(nid)||document.getElementById('selectedPanel').style.display==='none'||!isInputFocused)){
+    if(state.selectedItem && cid !== String(nid)) {
         document.getElementById('selectedPanel').style.display='block';
         document.getElementById('selectedPanel').dataset.selectedId=nid;
         const tt={room:'部屋',wall:'壁',door:'ドア',window:'窓',manikin:'人型',dimension:'寸法線'};
@@ -1760,7 +1760,7 @@ function updateUI(){
         document.getElementById('selectedControls').innerHTML=c;
         setTimeout(()=>{
             const rn=document.getElementById('roomName');
-            if(rn){rn.addEventListener('input',e=>{state.selectedItem.name=e.target.value;requestAnimationFrame(()=>draw());});rn.addEventListener('focus',e=>e.target.select());}
+            if(rn){rn.addEventListener('input',e=>{state.selectedItem.name=e.target.value;const rm=state.rooms.find(r=>r.id===state.selectedItem.id);if(rm)rm.name=e.target.value;draw();});rn.addEventListener('focus',e=>e.target.select());}
             const rp=document.getElementById('roomPurpose');
             if(rp){rp.addEventListener('input',e=>{state.selectedItem.purpose=e.target.value;requestAnimationFrame(()=>draw());});rp.addEventListener('focus',e=>e.target.select());}
             const rc=document.getElementById('roomColor');
@@ -1879,12 +1879,10 @@ canvas.addEventListener('contextmenu', e=>{
 });
 
 canvas.addEventListener('wheel', e=>{
-    if(e.ctrlKey) e.preventDefault();
-    if(e.ctrlKey||e.metaKey){
-        const delta=e.deltaY>0?-0.1:0.1;
-        state.zoomLevel=Math.max(0.3,Math.min(3.0,state.zoomLevel+delta));
-        draw();
-    }
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    state.zoomLevel = Math.max(0.3, Math.min(3.0, state.zoomLevel + delta));
+    draw();
 },{passive:false});
 
 canvas.addEventListener('mousedown', e=>{
@@ -2262,15 +2260,7 @@ canvas.addEventListener('mouseup', ()=>{
     if(state.isDragging){
         if(state.selectedItem&&state.selectedItem.type==='room'){
             const r=state.rooms.find(rm=>rm.id===state.selectedItem.id);
-            if(r){
-                // まず辺スナップを試みる（重なっていない場合のみ適用）
-                const snapCandidate=JSON.parse(JSON.stringify(r.vertices));
-                snapRoomToNearbyEdges(r);
-                // スナップ後に重なりが生じたら辺スナップをキャンセル
-                const afterSnapOverlap=state.rooms.filter(other=>other.id!==r.id&&polygonsIntersect(r.vertices,other.vertices));
-                if(afterSnapOverlap.length>0){ r.vertices=snapCandidate; }
-                r.vertices=r.vertices.map(v=>snapPointToGrid(v));
-            }
+            if(r){ snapRoomToNearbyEdges(r); r.vertices=r.vertices.map(v=>snapPointToGrid(v)); }
             detectAllOverlaps(); updateOverlapBadge();
             saveHistory(); draw();
         } else if(state.isDraggingDoorWindow){ saveHistory(); }

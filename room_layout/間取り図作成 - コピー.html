@@ -1203,7 +1203,26 @@ function draw() {
     }
 
     ctx.restore();
-    updateUI();
+    updateUILight();
+}
+
+function updateUILight(){
+    const ta=getTotalArea();
+    document.getElementById('totalArea').textContent=ta;
+    document.getElementById('totalAreaTop').textContent=ta;
+    document.getElementById('roomCount').textContent=state.rooms.length;
+    document.getElementById('scaleDisplay').textContent=Math.round(state.zoomLevel*100);
+    const mqa=document.getElementById('multiSelectQuickActions');
+    if(state.selectedTool==='multi-select'&&state.multiSelectedRooms.length>0){
+        mqa.style.display='block';
+        document.getElementById('selectedCountQuick').textContent=state.multiSelectedRooms.length;
+    } else { mqa.style.display='none'; }
+    if(state.selectedItem){
+        document.getElementById('selectedPanel').style.display='block';
+    } else {
+        document.getElementById('selectedPanel').style.display='none';
+        document.getElementById('selectedPanel').dataset.selectedId='';
+    }
 }
 
 function updateUI(){
@@ -1220,7 +1239,7 @@ function updateUI(){
 
     const cid=document.getElementById('selectedPanel').dataset.selectedId;
     const nid=state.selectedItem?state.selectedItem.id:null;
-    if(state.selectedItem&&(cid!==String(nid)||document.getElementById('selectedPanel').style.display==='none')){
+    if(state.selectedItem && cid !== String(nid)) {
         document.getElementById('selectedPanel').style.display='block';
         document.getElementById('selectedPanel').dataset.selectedId=nid;
         const tt={room:'部屋',wall:'壁',door:'ドア',window:'窓',manikin:'人型',dimension:'寸法線'};
@@ -1250,7 +1269,7 @@ function updateUI(){
         document.getElementById('selectedControls').innerHTML=c;
         setTimeout(()=>{
             const rn=document.getElementById('roomName');
-            if(rn){rn.addEventListener('input',e=>{state.selectedItem.name=e.target.value;requestAnimationFrame(()=>draw());});rn.addEventListener('focus',e=>e.target.select());}
+            if(rn){rn.addEventListener('input',e=>{state.selectedItem.name=e.target.value;const r=state.rooms.find(rm=>rm.id===state.selectedItem.id);if(r) r.name=e.target.value;draw();});rn.addEventListener('focus',e=>e.target.select());}
             const rp=document.getElementById('roomPurpose');
             if(rp){rp.addEventListener('input',e=>{state.selectedItem.purpose=e.target.value;requestAnimationFrame(()=>draw());});rp.addEventListener('focus',e=>e.target.select());}
             const rc=document.getElementById('roomColor');
@@ -1287,9 +1306,11 @@ function updateUI(){
             if(fdh)fdh.addEventListener('click',()=>{state.selectedItem.flippedHorizontal=!state.selectedItem.flippedHorizontal;const di=state.doors.findIndex(d=>d.id===state.selectedItem.id);if(di!==-1)state.doors[di].flippedHorizontal=state.selectedItem.flippedHorizontal;saveHistory();draw();});
         },0);
     } else if(!state.selectedItem){
-        document.getElementById('selectedPanel').style.display='none';
-        document.getElementById('selectedPanel').dataset.selectedId='';
-    }
+    document.getElementById('selectedPanel').style.display='none';
+    document.getElementById('selectedPanel').dataset.selectedId='';
+} else {
+    document.getElementById('selectedPanel').style.display='block';
+}
 }
 
 function findItemAt(x,y){
