@@ -1250,7 +1250,7 @@ function updateUI(){
         document.getElementById('selectedControls').innerHTML=c;
         setTimeout(()=>{
             const rn=document.getElementById('roomName');
-            if(rn){rn.addEventListener('input',e=>{state.selectedItem.name=e.target.value;requestAnimationFrame(()=>draw());});rn.addEventListener('focus',e=>e.target.select());}
+            if(rn){rn.addEventListener('input',e=>{state.selectedItem.name=e.target.value;const r=state.rooms.find(rm=>rm.id===state.selectedItem.id);if(r) r.name=e.target.value;draw();});rn.addEventListener('focus',e=>e.target.select());}
             const rp=document.getElementById('roomPurpose');
             if(rp){rp.addEventListener('input',e=>{state.selectedItem.purpose=e.target.value;requestAnimationFrame(()=>draw());});rp.addEventListener('focus',e=>e.target.select());}
             const rc=document.getElementById('roomColor');
@@ -1287,9 +1287,11 @@ function updateUI(){
             if(fdh)fdh.addEventListener('click',()=>{state.selectedItem.flippedHorizontal=!state.selectedItem.flippedHorizontal;const di=state.doors.findIndex(d=>d.id===state.selectedItem.id);if(di!==-1)state.doors[di].flippedHorizontal=state.selectedItem.flippedHorizontal;saveHistory();draw();});
         },0);
     } else if(!state.selectedItem){
-        document.getElementById('selectedPanel').style.display='none';
-        document.getElementById('selectedPanel').dataset.selectedId='';
-    }
+    document.getElementById('selectedPanel').style.display='none';
+    document.getElementById('selectedPanel').dataset.selectedId='';
+} else {
+    document.getElementById('selectedPanel').style.display='block';
+}
 }
 
 function findItemAt(x,y){
