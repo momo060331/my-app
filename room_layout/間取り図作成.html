@@ -1203,7 +1203,26 @@ function draw() {
     }
 
     ctx.restore();
-    updateUI();
+    updateUILight();
+}
+
+function updateUILight(){
+    const ta=getTotalArea();
+    document.getElementById('totalArea').textContent=ta;
+    document.getElementById('totalAreaTop').textContent=ta;
+    document.getElementById('roomCount').textContent=state.rooms.length;
+    document.getElementById('scaleDisplay').textContent=Math.round(state.zoomLevel*100);
+    const mqa=document.getElementById('multiSelectQuickActions');
+    if(state.selectedTool==='multi-select'&&state.multiSelectedRooms.length>0){
+        mqa.style.display='block';
+        document.getElementById('selectedCountQuick').textContent=state.multiSelectedRooms.length;
+    } else { mqa.style.display='none'; }
+    if(state.selectedItem){
+        document.getElementById('selectedPanel').style.display='block';
+    } else {
+        document.getElementById('selectedPanel').style.display='none';
+        document.getElementById('selectedPanel').dataset.selectedId='';
+    }
 }
 
 function updateUI(){
