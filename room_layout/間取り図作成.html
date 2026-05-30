@@ -1220,7 +1220,7 @@ function updateUI(){
 
     const cid=document.getElementById('selectedPanel').dataset.selectedId;
     const nid=state.selectedItem?state.selectedItem.id:null;
-    if(state.selectedItem && (cid !== String(nid) || document.getElementById('selectedPanel').style.display === 'none')) {
+    if(state.selectedItem && cid !== String(nid)) {
         document.getElementById('selectedPanel').style.display='block';
         document.getElementById('selectedPanel').dataset.selectedId=nid;
         const tt={room:'部屋',wall:'壁',door:'ドア',window:'窓',manikin:'人型',dimension:'寸法線'};
